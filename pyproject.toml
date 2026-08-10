@@ -20,7 +20,7 @@ classifiers = [
 [project.optional-dependencies]
 installer = ["pyserial>=3.5,<4"]
 assets = ["freewili>=0.0.51,<1"]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<9", "freewili>=0.0.51,<1"]
 
 [project.scripts]
 freewili-foxhunt = "freewili_foxhunt.app:main"
