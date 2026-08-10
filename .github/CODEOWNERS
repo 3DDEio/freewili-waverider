@@ -1,0 +1,10 @@
+# The project owner reviews changes to protected surfaces.
+* @3DDEio
+
+/.github/ @3DDEio
+/deploy/ @3DDEio
+/native/ @3DDEio
+/install.sh @3DDEio
+/uninstall.sh @3DDEio
+/LICENSE* @3DDEio
+/SECURITY.md @3DDEio

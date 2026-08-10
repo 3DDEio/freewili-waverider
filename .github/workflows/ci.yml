@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install '.[installer,dev]'
+      - run: python -m pytest -q tests
+      - run: sh -n install.sh uninstall.sh bin/foxhuntctl bin/foxhunt-guard deploy/build-native-apps.sh deploy/build-release.sh
+      - run: sh deploy/build-release.sh
+      - run: cd dist && sha256sum -c freewili-foxhunt-*.tar.gz.sha256

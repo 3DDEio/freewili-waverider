@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freewili-foxhunt"
+version = "0.1.0"
+description = "Receive-only RTL-SDR foxhunt instrument for FreeWili 2"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+authors = [{name = "FreeWili Foxhunt contributors"}]
+dependencies = []
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Communications :: Ham Radio",
+]
+
+[project.optional-dependencies]
+installer = ["pyserial>=3.5,<4"]
+assets = ["freewili>=0.0.51,<1"]
+dev = ["pytest>=8,<9"]
+
+[project.scripts]
+freewili-foxhunt = "freewili_foxhunt.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

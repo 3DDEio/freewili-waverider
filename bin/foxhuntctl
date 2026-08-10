@@ -1,0 +1,116 @@
+#!/bin/sh
+
+set -eu
+
+CONFIG=/boot/firmware/config.txt
+SERVICE=freewili-foxhunt.service
+GUARD=freewili-foxhunt-guard.service
+STATUS=/run/freewili-foxhunt/status.json
+PYTHONPATH=/opt/freewili-foxhunt/src
+export PYTHONPATH
+
+usage() {
+    echo "Usage: foxhuntctl {status|doctor|host|maintenance|next|previous|logs|lists} [args]"
+}
+
+require_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "Run this command with sudo." >&2
+        exit 1
+    fi
+}
+
+replace_required() {
+    old=$1
+    new=$2
+    # Replace the active old value before treating the new value as already
+    # applied. Raspberry Pi's stock config can contain the same setting under
+    # an unrelated board filter (for example, a CM5-only host-mode line); a
+    # file-wide match for the new value must not hide the CM0's active old one.
+    if grep -Fqx "$old" "$CONFIG"; then
+        temporary=$(mktemp /boot/firmware/.foxhunt-config.XXXXXX)
+        sed "s|^${old}$|${new}|" "$CONFIG" >"$temporary"
+        chmod --reference="$CONFIG" "$temporary"
+        chown --reference="$CONFIG" "$temporary"
+        mv "$temporary" "$CONFIG"
+        return
+    fi
+    if grep -Fqx "$new" "$CONFIG"; then
+        return
+    fi
+    echo "Expected boot setting is missing: $old" >&2
+    exit 1
+}
+
+maybe_reboot() {
+    if [ "${1:-}" = "--reboot" ]; then
+        sync
+        systemctl reboot
+    else
+        echo "Boot settings saved. Reboot when ready: sudo systemctl reboot"
+    fi
+}
+
+command=${1:-}
+case "$command" in
+    status)
+        systemctl status "$SERVICE" --no-pager -l || true
+        if [ -f "$STATUS" ]; then
+            echo
+            cat "$STATUS"
+        fi
+        ;;
+    doctor)
+        echo "FreeWili Foxhunt diagnostics"
+        echo "rtl_power: $(command -v rtl_power 2>/dev/null || echo missing)"
+        echo "fwcm0: $(command -v fwcm0 2>/dev/null || echo missing)"
+        echo "OneWili CM0: $(test -f /opt/onewili/cm0/python/onewili_cm0.py && echo present || echo missing)"
+        echo "USB role: $(grep -E '^dtoverlay=dwc2,dr_mode=' "$CONFIG" | tail -n 1 || echo unknown)"
+        echo "USB mux GPIO2: $(grep -E '^gpio=2=op,' "$CONFIG" | tail -n 1 || echo unknown)"
+        echo "USB mux GPIO3: $(grep -E '^gpio=3=op,' "$CONFIG" | tail -n 1 || echo unknown)"
+        systemctl is-enabled "$SERVICE" 2>/dev/null || true
+        if command -v lsusb >/dev/null 2>&1; then
+            lsusb
+        fi
+        ;;
+    host)
+        require_root
+        replace_required 'dtoverlay=dwc2,dr_mode=peripheral' 'dtoverlay=dwc2,dr_mode=host'
+        replace_required 'gpio=2=op,dl' 'gpio=2=op,dh'
+        replace_required 'gpio=3=op,dl' 'gpio=3=op,dh'
+        systemctl enable "$SERVICE"
+        systemctl enable "$GUARD"
+        echo "Foxhunt USB-host profile selected with a 2-minute safety check."
+        echo "If the SDR and display do not both become live, the maintenance console returns automatically."
+        maybe_reboot "${2:-}"
+        ;;
+    maintenance)
+        require_root
+        systemctl disable --now "$SERVICE" 2>/dev/null || true
+        systemctl disable "$GUARD" 2>/dev/null || true
+        replace_required 'dtoverlay=dwc2,dr_mode=host' 'dtoverlay=dwc2,dr_mode=peripheral'
+        replace_required 'gpio=2=op,dh' 'gpio=2=op,dl'
+        replace_required 'gpio=3=op,dl' 'gpio=3=op,dh'
+        echo "Maintenance profile selected. The CM0 serial console will return after reboot."
+        maybe_reboot "${2:-}"
+        ;;
+    next)
+        require_root
+        systemctl kill -s USR1 "$SERVICE"
+        ;;
+    previous)
+        require_root
+        systemctl kill -s USR2 "$SERVICE"
+        ;;
+    logs)
+        journalctl -u "$SERVICE" -n 120 --no-pager
+        ;;
+    lists)
+        shift
+        exec /usr/bin/python3 -m freewili_foxhunt.lists_cli "$@"
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac

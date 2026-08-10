@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible WaveRider problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials or private vulnerability details. Use private vulnerability reporting for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: WaveRider version
+      placeholder: v0.1.0-beta.1 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware and firmware
+      placeholder: FreeWili 2 firmware version, CM0 image, RTL-SDR model
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I have removed credentials, private keys, and personal device configuration.
+          required: true
+        - label: This report does not request transmit functionality.
+          required: true

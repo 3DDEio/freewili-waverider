@@ -1,0 +1,13 @@
+[Unit]
+Description=FreeWili Foxhunt guarded first receiver boot
+After=freewili-foxhunt.service
+Requires=freewili-foxhunt.service
+
+[Service]
+Type=oneshot
+Environment=FOXHUNT_GUARD_TIMEOUT=120
+ExecStart=/usr/local/bin/foxhunt-guard
+TimeoutStartSec=150
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/.venv/
+/.DS_Store
+/.idea/
+/.vscode/
+/build/
+/dist/
+*.tar.gz
+*.zip
+/research/*
+!/research/README.md

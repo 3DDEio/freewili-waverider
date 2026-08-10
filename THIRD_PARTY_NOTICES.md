@@ -1,0 +1,43 @@
+# Third-party notices
+
+WaveRider builds on software and packages maintained by other projects. Their
+licenses remain in force independently of WaveRider's GPL/CC licensing.
+
+## FreeWili WiliBSP
+
+- Upstream: <https://github.com/freewili/wilibsp>
+- License: MIT, plus component-specific notices recorded by upstream.
+- Use: RP2350B board support and native application build/runtime.
+
+## FreeWili OneWili
+
+- Upstream: <https://github.com/freewili/onewili>
+- Use: Display-to-Main command, event, and SD transport.
+- Notice: the pinned public checkout inspected for the initial import did not
+  contain a standalone license file. Confirm redistribution terms with
+  FreeWili before treating this notice as a license grant.
+
+## Raspberry Pi Pico SDK and OpenOCD
+
+- Pico SDK: <https://github.com/raspberrypi/pico-sdk>
+- OpenOCD tools: <https://github.com/raspberrypi/openocd>
+- Use: maintainers build and load volatile RP2350 applications.
+- These toolchains are not stored in the WaveRider Git repository.
+
+## rtl-sdr Debian packages
+
+- Upstream: <https://osmocom.org/projects/rtl-sdr>
+- Debian source package: `rtl-sdr` 2.0.2-2
+- Licenses: package contents include GPL-2.0-or-later, GPL-3.0-or-later,
+  LGPL-2.1-or-later, and MIT components as identified in the packages'
+  `/usr/share/doc/*/copyright` files.
+- Use: offline arm64 RTL-SDR runtime installation on the CM0.
+- Corresponding source is available from Debian's source archive for the exact
+  package version. Public releases must preserve the package copyright files
+  and identify the source version.
+
+## Generated and compiled files
+
+Prebuilt WaveRider UF2/ELF files correspond to the source in the tagged
+release. `native/dist/SHA256SUMS` records their checksums. Rebuilding requires
+the upstream dependencies described in [`research/README.md`](research/README.md).

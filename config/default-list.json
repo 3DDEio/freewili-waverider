@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "7c607781-843f-4e47-80a4-e62ad98d58cc",
+  "name": "2m and 70cm Foxhunt",
+  "defaults": {
+    "palette": "deep-blue-orange",
+    "floor_dbfs": -90.0,
+    "ceiling_dbfs": -30.0
+  },
+  "frequencies": [
+    {
+      "id": "166a9880-3b8c-4134-b4f5-d905cb8e5d1e",
+      "frequency_hz": 145265000,
+      "label": "2m fox",
+      "span_hz": 200000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "0d28700a-4ff4-4c71-afc4-7108dc324b82",
+      "frequency_hz": 146520000,
+      "label": "2m simplex",
+      "span_hz": 200000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "c3ea2c4c-f5d5-4bdb-963e-96859b5a0954",
+      "frequency_hz": 446000000,
+      "label": "70cm simplex",
+      "span_hz": 200000,
+      "gain_profile": "foxhunt"
+    }
+  ]
+}

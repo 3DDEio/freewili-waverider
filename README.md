@@ -1,0 +1,291 @@
+# WaveRider
+
+[![CI](https://github.com/3DDEio/freewili-waverider/actions/workflows/ci.yml/badge.svg)](https://github.com/3DDEio/freewili-waverider/actions/workflows/ci.yml)
+[![License: GPL v3+](https://img.shields.io/badge/software-GPLv3%2B-blue.svg)](LICENSE)
+[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-lightgrey.svg)](LICENSES/CC-BY-SA-4.0.txt)
+
+**WaveRider — RTL-SDR Foxhunt** turns a FreeWili 2 with its onboard CM0 and an
+RTL2832U/R820T USB receiver into a receive-only 2 m / 70 cm field instrument.
+
+WaveRider is currently beta software for FreeWili 2. Read the limitations below
+before relying on it in a field event.
+
+## Important current limitations
+
+- **16 frequencies in the Live hunt list.** The Display/Main mailbox is full
+  when all sixteen entries are published. Up to 100 additional values can be
+  retained in the paged Saved library and toggled into Live as needed.
+- **Receive only.** WaveRider never transmits and cannot key a radio.
+- **No received audio yet.** The speaker and headphone codec work, but the
+  required high-rate CM0-to-Display audio bridge has not been implemented.
+- **Relative RSSI, not calibrated dBm.** Readings are dBFS and are meaningful
+  for comparing signal strength while antenna, gain, and attenuation remain
+  consistent.
+- **Waterfall is a field view, not a laboratory spectrum analyzer.** Each row
+  carries twelve measured RF bins which are smoothed and interpolated across
+  the screen. Real off-frequency peaks are intentionally not mirrored.
+- **Linux/SDR startup is not instant.** The app displays startup progress and
+  receiver health while CM0 Linux and the RTL-SDR become ready.
+- **Live receiver mode and the CM0 maintenance serial console are mutually
+  exclusive** on the tested FW2 v07 hardware because the CM0 has one USB
+  controller.
+- Hardware validation currently covers one FX0177/v07 FreeWili 2 and an
+  RTL2838/R820T receiver. Other compatible RTL-SDRs may work but are not yet
+  part of the connected-device test matrix.
+
+See [Known limitations](docs/LIMITATIONS.md) for consequences and workarounds,
+and the [User guide](docs/USER_GUIDE.md) for normal operation.
+
+## What it does
+
+- A persistent saved-frequency library with up to 100 values, independently
+  managed from the 16-entry live hunt list.
+- Large, frequency-only channel rows on the live hunt screen for field readability.
+- Exact on-device frequency entry from 24 MHz to 1.766 GHz using cursor-editable
+  kHz digits or the touch keypad; no step-size setup is required.
+- Fast next/previous frequency selection.
+- RTL-SDR connection and live-sample health state.
+- Relative RSSI in dBFS with an explicitly labeled waterfall scale.
+- A continuous blue-to-yellow RSSI range with a moving live-value pointer.
+- A three-second WaveRider whale-and-sound-wave startup splash.
+- A short waterfall calibration followed by a stable 30 dB color window, so
+  antenna movement remains comparable across time.
+- Low-latency native IQ capture targeting 10 analyses per second, with
+  complete 100 ms reads and latest-only buffering so the field display cannot
+  accumulate stale motion.
+- Configurable 25 kHz to 2 MHz visible spans.
+- A loadable native Display app that reads FreeWili's supported `uartkbd`
+  hardware queue directly, bypassing the broken v07 CM0 button relay.
+- A compact Main app-signal mailbox carrying button commands, active frequency,
+  RSSI, peak, frequency lists, and 12-bin live waterfall rows between the
+  Display processor and CM0 service.
+- Stock Apps-menu installation without replacing Main or Display firmware.
+- A maintenance profile that restores the CM0 USB serial console.
+- Seven-LED startup, ready, RSSI, and fault feedback.
+- A **Pocket Alert** status page and threshold design are retained for future
+  haptic support. Hardware output is disabled in public builds: the connected
+  FX0177 did not vibrate even though the experimental GPIO46 pad completed all
+  requested transitions, and FreeWili has not published an authoritative motor
+  driver or waveform specification. The Info page includes a deliberate,
+  input-only weak-pull probe for GPIO31/36/44/46; it never enables output drive.
+- Plain-language startup, refresh, and receiver-fault status pages.
+
+This software receives only. It does not turn the RTL-SDR into a transmitter.
+
+## Hardware
+
+- FreeWili 2 with the onboard CM0 and current CM0 Linux image.
+- RTL2832U-compatible SDR. The initial test device uses an R820T tuner.
+- SDR connected to **Linux USB Host**, the rightmost bottom USB-A socket,
+  immediately left of the Main SD card.
+- An antenna appropriate for the frequency being monitored. A directional
+  antenna is required for meaningful bearing work.
+
+## Install from a release
+
+The installer is offline-capable and does not replace FreeWili firmware.
+
+1. Boot the CM0 in its normal maintenance/serial-console profile.
+2. Download and extract the [latest WaveRider release](https://github.com/3DDEio/freewili-waverider/releases/latest)
+   on Windows, macOS, or Linux.
+3. Install the host-side installer and image-transfer dependencies:
+
+   ```text
+   python3 -m pip install 'pyserial>=3.5,<4' 'freewili>=0.0.51,<1'
+   ```
+
+4. Install the native WaveRider Apps-menu application with the built-in
+   CMSIS-DAP probe connected. [Raspberry Pi's RP2350-capable OpenOCD](https://github.com/raspberrypi/pico-sdk-tools/releases)
+   must be on
+   `PATH`, or supplied with `--openocd` and `--scripts`:
+
+   ```text
+   python3 tools/fw2_install_native_app.py --dry-run
+   python3 tools/fw2_install_native_app.py
+   ```
+
+   Wait for **INSTALL COMPLETE**, then hold Home for five seconds. The loader
+   runs only from volatile SRAM/PSRAM and fail-closes on any QSPI target.
+
+5. Identify the CM0 console port:
+
+   - macOS: usually `/dev/cu.usbmodem1701`
+   - Linux: usually `/dev/ttyACM0`
+   - Windows: a COM port such as `COM7`
+
+6. Install and reboot into receiver mode:
+
+   ```text
+   python3 deploy/serial_install.py --port /dev/cu.usbmodem1701 --activate
+   ```
+
+The serial port disappearing is expected: the CM0 has one USB controller and
+receiver mode routes it to the Linux USB Host socket. The first receiver boot is
+guarded for two minutes. If the SDR and on-device display do not both become
+live, the installer restores maintenance mode and the serial console returns.
+
+## On-device controls
+
+- Gray — **Lists:** open the saved-frequency library and live-list manager.
+- Yellow — **Audio:** open the audio status page. Received audio remains muted
+  until the planned PCM bridge is implemented.
+- Green — **Next:** tune the next saved frequency.
+- Blue — **Previous:** tune the preceding saved frequency.
+- Red — **Refresh:** verify the CM0/SDR connection, restart capture, display
+  status, and repaint the waterfall after a new row arrives.
+- D-pad Up/Down/Left/Right: browse and immediately tune list entries on the live
+  screen. Check applies the highlighted entry.
+- Page (or a tap on the RSSI scale) — **Pocket Alert:** view haptic hardware
+  availability and open the bounded weak-pull pin diagnostic with Red **Info**.
+
+Pocket Alert cannot be enabled in this release. Visual RSSI, waterfall, and
+seven-LED feedback remain active.
+
+In Lists:
+
+- D-pad Up/Down selects a saved frequency; Left/Right changes pages.
+- Green or Check adds/removes the selected value from the 16-entry live list.
+- Yellow **New** opens exact frequency entry.
+- Blue **Tune** adds the selected value to Live when necessary and tunes it.
+- Red **Delete** asks for confirmation, then removes the saved value and its
+  Live membership.
+
+In New Frequency:
+
+- Touch the digits to type a kHz value such as `433200`, displayed as
+  `433.200 MHz`.
+- D-pad Left/Right selects a digit; Up/Down replaces that digit.
+- The touch keypad replaces the selected digit and advances the cursor.
+- Check saves the value to the library; Red cancels without changing it.
+
+Custom list names and descriptive labels currently require the maintenance
+console; exact frequencies can be added and removed entirely on-device.
+
+## Return to maintenance mode
+
+From the on-device Linux terminal or another CM0 shell path:
+
+```text
+sudo foxhuntctl maintenance --reboot
+sudo foxhuntctl lists show
+```
+
+After reboot, the CM0 USB serial console returns and the SDR host port is no
+longer active.
+
+## Common commands
+
+```text
+sudo foxhuntctl doctor
+sudo foxhuntctl status
+sudo foxhuntctl next
+sudo foxhuntctl previous
+sudo foxhuntctl logs
+sudo foxhuntctl host --reboot
+sudo foxhuntctl maintenance --reboot
+```
+
+## Frequency lists
+
+Lists live at `/var/lib/freewili-foxhunt/lists/*.json`. They use integer Hz
+internally, so saved frequencies do not accumulate decimal rounding error.
+
+The saved library supports up to **100 unique frequencies**. WaveRider pages
+that library through its bounded mailbox, while the live hunt screen publishes
+and operates on a maximum of **16 entries**. The Lists page shows a `LIVE`
+badge beside every saved value currently participating in the hunt rotation.
+
+Each entry supports:
+
+- `frequency_hz`
+- a short `label`
+- `span_hz`
+- `gain_profile`: `auto`, `foxhunt`, `close-in`, or `manual`
+
+The app writes list updates atomically and keeps the previous file as a backup.
+
+Create a custom named list while the maintenance console is connected:
+
+```text
+sudo foxhuntctl lists create "Club Foxhunt" 145.565 "Primary fox"
+sudo foxhuntctl lists add "Club Foxhunt" 146.565 "Backup fox" --span 500000
+sudo foxhuntctl lists move "Club Foxhunt" 2 up
+sudo foxhuntctl lists rename "Club Foxhunt" "Saturday ARES Hunt"
+```
+
+## Signal units
+
+The default readout is relative dBFS. RTL-SDR gain, tuner variation, antenna
+loss, cable loss, and attenuation all affect the number. Absolute dBm is not
+shown unless a future calibration profile explicitly supports the complete RF
+path. Relative dBFS is still highly useful during a foxhunt: with the gain and
+antenna held constant, a less-negative number means a stronger received signal.
+
+## Development
+
+User-visible constraints are part of the product contract. Any newly discovered
+limit must be added to `docs/LIMITATIONS.md`; if it can affect installation or
+field use, it must also be summarized in **Important current limitations** near
+the top of this README. Documentation contract tests keep the current frequency
+cap, safety boundary, audio status, and physical button map visible.
+
+Run the test suite:
+
+```text
+python3 -m pip install '.[installer,dev]'
+python3 -m pytest -q tests
+```
+
+Build a GitHub release archive:
+
+```text
+sh deploy/build-release.sh
+```
+
+GitHub Actions verifies Python 3.11 and 3.13 on every push. Pushing a tag such
+as `v0.1.0` runs the test suite, rebuilds and verifies the offline archive, and
+publishes both the archive and checksum as a GitHub release.
+
+See the [User guide](docs/USER_GUIDE.md),
+[Known limitations](docs/LIMITATIONS.md),
+[Architecture](docs/ARCHITECTURE.md), [Deployment](docs/DEPLOYMENT.md),
+[Splash assets](assets/splash/README.md), and
+[Troubleshooting](docs/TROUBLESHOOTING.md). The public product name is
+**WaveRider**; remaining work is tracked in [the backlog](docs/BACKLOG.md).
+
+## Project governance
+
+WaveRider is developed in public at
+[`3DDEio/freewili-waverider`](https://github.com/3DDEio/freewili-waverider).
+The `main` branch is protected: changes are expected to arrive through pull
+requests, pass CI, and receive owner review. See [Contributing](CONTRIBUTING.md)
+and the [Security policy](SECURITY.md). The repository's pre-public work is
+recorded honestly in [Project history](HISTORY.md); it is a reconstructed
+milestone record, not fabricated Git history.
+
+## Current beta boundary
+
+The RTL-SDR capture, persistence, health reporting, recovery profiles, native
+screen, exact-frequency editor, all five context buttons, D-pad/Check tuning,
+RSSI, and live waterfall have been exercised on FW2 v07 hardware (FX0177) with
+an RTL2838/R820T receiver. The connected pipeline has sustained approximately
+5 committed waterfall rows per second with no unbounded queue growth. Final
+field acceptance still requires a controlled known-beacon check of the revised
+waterfall profile, RSSI/LED response, and deliberate receiver-fault feedback.
+
+Planned next: a dedicated bounded PCM bridge for optional narrow-FM speaker and
+headphone audio, with on-device volume, output, squelch, and mute controls.
+
+## License
+
+WaveRider software is licensed under
+[GNU GPL v3 or later](LICENSE). Redistributed software and derivative works
+must remain available under the GPL with corresponding source; the GPL does
+not permit someone to convert the copyrighted WaveRider codebase into an
+incompatible proprietary release.
+
+Documentation and original artwork are licensed under
+[Creative Commons Attribution-ShareAlike 4.0](LICENSES/CC-BY-SA-4.0.txt).
+Third-party components retain their own licenses. See [Licensing](LICENSES.md)
+and [Third-party notices](THIRD_PARTY_NOTICES.md). FreeWili and related marks
+belong to their respective owners; WaveRider is an independent project.

@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+STATUS=/run/freewili-foxhunt/status.json
+TIMEOUT=${FOXHUNT_GUARD_TIMEOUT:-120}
+elapsed=0
+
+while [ "$elapsed" -lt "$TIMEOUT" ]; do
+    if [ -f "$STATUS" ] && grep -q '"state": "live"' "$STATUS" \
+        && grep -q '"sdr_connected": true' "$STATUS" \
+        && grep -q '"display_connected": true' "$STATUS"; then
+        systemctl disable freewili-foxhunt-guard.service 2>/dev/null || true
+        logger -t freewili-foxhunt "guard passed: SDR and on-device display are live"
+        exit 0
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+done
+
+logger -t freewili-foxhunt "guard failed: restoring the maintenance USB profile"
+systemctl disable --now freewili-foxhunt.service 2>/dev/null || true
+systemctl disable freewili-foxhunt-guard.service 2>/dev/null || true
+foxhuntctl maintenance
+sync
+systemctl reboot

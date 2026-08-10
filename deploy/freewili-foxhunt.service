@@ -1,0 +1,16 @@
+[Unit]
+Description=FreeWili 2 RTL-SDR Foxhunt
+After=multi-user.target fwcm0-bridge.service
+Wants=fwcm0-bridge.service
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=/opt/freewili-foxhunt/src:/opt/onewili/python:/opt/onewili/cm0/python
+Environment=WAVERIDER_DISPLAY_BACKEND=native
+ExecStart=/usr/bin/python3 -m freewili_foxhunt.app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

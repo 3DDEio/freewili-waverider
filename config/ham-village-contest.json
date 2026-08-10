@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "id": "727cb01f-ae5e-50e8-861f-1c6409d835d4",
+  "name": "Ham Village Contest",
+  "defaults": {
+    "palette": "deep-blue-orange",
+    "floor_dbfs": -90.0,
+    "ceiling_dbfs": -30.0
+  },
+  "frequencies": [
+    {
+      "id": "991210d9-eb42-5dc0-bf02-724653b367b6",
+      "frequency_hz": 147495000,
+      "label": "Contest 2m 4 - Active beacon",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "e61b1fab-1901-5604-a892-aa1e4554a03a",
+      "frequency_hz": 147545000,
+      "label": "Contest 2m 5",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "f339ed08-2176-548f-ac12-e4ebf29f0541",
+      "frequency_hz": 147420000,
+      "label": "Contest 2m 1",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "87024477-9338-507a-a775-fd20337fb02e",
+      "frequency_hz": 147445000,
+      "label": "Contest 2m 2",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "8408c301-62e3-5110-a9ac-a9b4b5d61046",
+      "frequency_hz": 147470000,
+      "label": "Contest 2m 3",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "80c4a7ba-5a2f-5f0d-a4e5-8cf40986c337",
+      "frequency_hz": 446025000,
+      "label": "Contest 70cm 1",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "399d4b10-4836-55d7-bcb6-11efcb4bd22d",
+      "frequency_hz": 446050000,
+      "label": "Contest 70cm 2",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "5123198a-3685-583d-b31c-2a6d7f7a77f5",
+      "frequency_hz": 446075000,
+      "label": "Contest 70cm 3",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "6570e8f6-9026-57b5-972e-dccf45cb307f",
+      "frequency_hz": 446100000,
+      "label": "Contest 70cm 4",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    },
+    {
+      "id": "646b6077-79a8-5c0c-aacb-7a44249899c6",
+      "frequency_hz": 446125000,
+      "label": "Contest 70cm 5",
+      "span_hz": 100000,
+      "gain_profile": "foxhunt"
+    }
+  ]
+}
