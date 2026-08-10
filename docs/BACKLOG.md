@@ -26,8 +26,11 @@ Brand migration begins after the connected device demonstrates:
 - [x] Change the on-device panel title and status identity to `WaveRider`.
 - Use `WaveRider — RTL-SDR Foxhunt` as the descriptive subtitle.
 - Rename release archives, screenshots, and public documentation.
-- Decide whether the GitHub repository should become `waverider` before its
-  first public release.
+- [x] Publish the project as
+  [`3DDEio/freewili-waverider`](https://github.com/3DDEio/freewili-waverider).
+  The first public Git history is an honest initial import; earlier milestones
+  are reconstructed in `HISTORY.md` rather than represented by fabricated
+  commits.
 - Preserve `foxhuntctl`, `freewili-foxhunt.service`, installed list paths, and
   upgrade compatibility unless a migration provides explicit aliases and
   rollback coverage.
@@ -147,7 +150,13 @@ Brand migration begins after the connected device demonstrates:
   deployment helpers, and public documentation. The archived `display.py` and
   `waverider_display.uf2` hashes match the working tree, the archive checksum
   file verifies, and a clean extraction passes the native installer's SRAM-only
-  dry-run gate.
+  dry-run gate. Public prerelease
+  [`v0.1.0-beta.1`](https://github.com/3DDEio/freewili-waverider/releases/tag/v0.1.0-beta.1)
+  was downloaded again from GitHub and its published checksum verified. The
+  protected `main` branch requires both Python 3.11 and 3.13 CI checks,
+  CODEOWNER review, linear history, and resolved review conversations; force
+  pushes and branch deletion are blocked. Secret scanning, push protection,
+  private vulnerability reporting, and web commit signoff are enabled.
 - [x] Constrain waterfall plot values to FW2's documented 0..100 plot scale.
   The previous 0..255 encoder caused v07 to reject `g\\e\\f` values above 100 as
   `Invalid`, leaving a partially staged hot/yellow row and a static panel. The
