@@ -15,7 +15,23 @@ corresponding physical behavior on the connected FreeWili 2.
 | Pocket Alert haptics | With Pocket Alert enabled, a below-to-above threshold crossing produces exactly three pulses; a steady carrier does not repeat, another crossing inside 30 seconds is suppressed, and a crossing after both cooldown and 3 dB re-arm alerts again. Settings survive restart. | The physical Test produced no vibration even though connected diagnostics recorded matching requested/output-latch/settled-pad transitions for every GPIO46 edge. Official public sources provide only a secondary `GPIO46` note marked `TODO`; current logic-analyzer docs also use GPIO46 as an analog input. Output drive is disabled. The input-only weak-pull scan was also negative: GPIO31 twice, then GPIO36, GPIO44, and GPIO46 once each, all restored after testing. | **Blocked on authoritative motor-control specification or confirmation that a motor is populated** |
 | Automatic CM0 Linux startup | Launch WaveRider from the stock Apps menu after a cold boot without opening Linux Terminal; CM0 service reaches live SDR/display state. | After a full reboot, the user launched WaveRider from Apps and it eventually entered live SDR operation without manually opening Linux Terminal. The native app now shows staged startup progress and a browsable Receiver Status page while this wait is in progress. | Proven; final progress-page UX pending |
 | Persistent operation | After complete power removal and restoration, the Apps entry remains and the same build becomes live. | The Apps entry, stored contest list, and executable survived full power removal; the user launched WaveRider and it eventually returned to live SDR data. | Proven |
-| Reproducible public deployment | Clean release contains the final CM0/native artifacts, documentation, offline dependencies, checksums, and a safe install path. | 118 host tests pass, including Pocket Alert persistence/protocol, no-full-screen-live-repaint, ordered-source persistence, paged Live membership/count, public-documentation, and non-retaining RSSI-marker contract checks. The release archive is rebuilt and checksum-verified for each connected deployment, and its native installer passes the SRAM-only gate. | Proven |
+| Reproducible public deployment | Clean release contains the final CM0/native artifacts, documentation, offline dependencies, checksums, and a safe install path. | 123 host tests pass. A clean staged checkout independently passed those tests, native artifact checks, archive construction, and archive checksum validation. GitHub CI passes on Python 3.11 and 3.13. Public prerelease `v0.1.0-beta.1` was downloaded from GitHub and its published checksum verified. The native installer remains subject to the SRAM-only gate. | Proven |
+
+## Public project record
+
+- Repository: <https://github.com/3DDEio/freewili-waverider>
+- First public prerelease:
+  <https://github.com/3DDEio/freewili-waverider/releases/tag/v0.1.0-beta.1>
+- Software license: GPL-3.0-or-later.
+- Documentation and original artwork: CC BY-SA 4.0.
+- Protected `main`: both CI jobs and CODEOWNER review required; stale approvals
+  dismissed; force pushes and deletion blocked.
+- Security: secret scanning, push protection, web commit signoff, and private
+  vulnerability reporting enabled.
+- Known distribution uncertainty: the checked-out public OneWili source did
+  not contain a standalone license file. WaveRider does not bundle that source;
+  redistribution rights should be confirmed with FreeWili before that boundary
+  changes.
 
 ## Final hands-on audit
 
