@@ -7,6 +7,8 @@
 **WaveRider — RTL-SDR Foxhunt** turns a FreeWili 2 with its onboard CM0 and an
 RTL2832U/R820T USB receiver into a receive-only 2 m / 70 cm field instrument.
 
+https://hackerwarehouse.com/product/rtlsdr/
+
 WaveRider is currently beta software for FreeWili 2. Read the limitations below
 before relying on it in a field event.
 
