@@ -6,9 +6,30 @@ All notable public changes to WaveRider are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Frequency-grouped, persistent CW message history with confirmation-gated
+  Clear and larger word-wrapped decoded text.
+- Optional, separate CircuitPython SA868 development beacon fixture with a
+  byte-for-byte verified deployment path.
+
+### Changed
+
+- Continuous IQ collection now runs independently of FFT/Morse processing with
+  a bounded queue and visible overrun failure instead of dropped CW timing.
+- Morse carrier hysteresis, separator preservation, whole-message timing fit,
+  and three-reception consensus now support exact known-payload field decodes.
+
+### Field validation
+
+- Exact 100 percent displayed character accuracy at 147.500 MHz for
+  `KO6FQY JOIN NORCALCYBER.IO! KO6FQY`.
+- Exact 100 percent displayed character accuracy at 144.300 MHz for
+  `KO6FQY -- DECOY DECOY -- KO6FQY`.
+
 ### Planned
 
-- Controlled known-beacon field acceptance.
+- Larger CW efficacy sample and beacon-off false-positive control.
 - Optional narrow-FM speaker/headphone audio bridge.
 - Authoritative haptic-driver integration if FreeWili publishes the hardware
   interface and the connected board is confirmed to contain a motor.
@@ -29,8 +50,10 @@ All notable public changes to WaveRider are recorded here. The format follows
 ### Known limitations
 
 - Received audio is not implemented.
-- Haptic output is disabled because the public hardware control path is not
-  authoritative and the connected device did not respond.
+- This original beta disabled haptic output because the public pin assignment
+  was incorrect. Unreleased WaveRider builds now use physically verified
+  Display GPIO35 on FX0177 v07; other board revisions still require manual
+  Test validation.
 - The waterfall is optimized for field direction finding, not laboratory
   measurement.
 - RSSI is relative dBFS, not calibrated dBm.

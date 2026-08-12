@@ -20,13 +20,15 @@ before relying on it in a field event.
 - **Receive only.** WaveRider never transmits and cannot key a radio.
 - **No received audio yet.** The speaker and headphone codec work, but the
   required high-rate CM0-to-Display audio bridge has not been implemented.
-- **Morse decoding is experimental.** WaveRider can acquire an NFM Morse audio
+- **Morse decoding remains beta.** WaveRider can acquire an NFM Morse audio
   tone across approximately 450–1,150 Hz on the selected frequency. Candidate text is retained
   internally, but a message is not shown as detected until at least three
   recent receptions agree. Noisy, weak, overlapping, or differently pitched
   signals may still be withheld or decode incorrectly. Morse has no letter
   case, so detected text is shown uppercase. WaveRider does not invent or
-  dictionary-correct uncertain characters.
+  dictionary-correct uncertain characters. Exact user-visible field decodes
+  are proven at 147.500 and 144.300 MHz with two distinct known payloads; the
+  larger efficacy sample and beacon-off false-positive control remain open.
 - **Relative RSSI, not calibrated dBm.** Readings are dBFS and are meaningful
   for comparing signal strength while antenna, gain, and attenuation remain
   consistent.
@@ -97,6 +99,14 @@ and the [User guide](docs/USER_GUIDE.md) for normal operation.
   mailbox, so waterfall and controls retain priority.
 
 This software receives only. It does not turn the RTL-SDR into a transmitter.
+
+## Optional development test beacon
+
+[`test-beacon/`](test-beacon/README.md) contains the separately licensed,
+optional XIAO ESP32-C3 + NiceRF SA868 fixture used for controlled WaveRider
+field tests. It is not installed by WaveRider, is not required by end users,
+and does not change WaveRider's receive-only behavior. Its fail-safe updater
+stages and reads back the complete CircuitPython program before activation.
 
 ## Hardware
 
@@ -319,9 +329,14 @@ The RTL-SDR capture, persistence, health reporting, recovery profiles, native
 screen, exact-frequency editor, all five context buttons, D-pad/Check tuning,
 RSSI, and live waterfall have been exercised on FW2 v07 hardware (FX0177) with
 an RTL2838/R820T receiver. The connected pipeline has sustained approximately
-5 committed waterfall rows per second with no unbounded queue growth. Final
-field acceptance still requires a controlled known-beacon check of the revised
-waterfall profile, RSSI/LED response, and deliberate receiver-fault feedback.
+5 committed waterfall rows per second with no unbounded queue growth. Known
+13 WPM / 800 Hz beacons have decoded with 100 percent displayed character
+accuracy at both 147.500 MHz (`KO6FQY JOIN NORCALCYBER.IO! KO6FQY`) and
+144.300 MHz (`KO6FQY -- DECOY DECOY -- KO6FQY`) after the three-reception
+consensus gate. Final field acceptance still requires the larger efficacy
+sample, a beacon-off false-positive control, and the remaining RSSI/LED,
+startup, waterfall, and message-management observations in the completion
+audit.
 
 Planned next: a dedicated bounded PCM bridge for optional narrow-FM speaker and
 headphone audio, with on-device volume, output, squelch, and mute controls.

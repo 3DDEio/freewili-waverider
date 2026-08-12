@@ -43,7 +43,7 @@ planned control surface is discoverable without implying that sound is active.
 buffering, mute, volume, squelch, and Speaker/Headphones/Both routing. Audio
 must never slow the waterfall, controls, or recovery path.
 
-## Morse decoding is tone-specific and experimental
+## Morse decoding is tone-specific and remains beta
 
 WaveRider's CM0 path can now demodulate phase changes from the selected NFM
 carrier, search approximately 450–1,150 Hz for an audio tone, and decode its
@@ -67,10 +67,13 @@ be undone. This is conservative voting, not dictionary
 correction, and it cannot guarantee the transmitted text.
 
 **Current validation:** synthetic offset-tuned RTL IQ recovers `KO6FQY` and an
-unmodulated carrier is rejected. Connected over-the-air decoding of the
-147.500 MHz KO6FQY beacon has produced partial over-the-air text, but the
-complete payload still needs repeatable clean recovery before this feature is
-considered field-proven.
+unmodulated carrier is rejected. Connected over-the-air consensus produced
+100 percent displayed character accuracy for two distinct 13 WPM / 800 Hz
+payloads: `KO6FQY JOIN NORCALCYBER.IO! KO6FQY` at 147.500 MHz and
+`KO6FQY -- DECOY DECOY -- KO6FQY` at 144.300 MHz. This proves the core field
+decode and frequency labeling on the tested hardware. The larger efficacy
+sample, beacon-off false-positive duration, and physical history Clear check
+remain before the complete Morse gate closes.
 
 The decoder can be persistently disabled from Settings. Disabling it stops new
 Morse processing but deliberately retains existing verified and candidate
