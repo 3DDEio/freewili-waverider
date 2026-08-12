@@ -144,6 +144,41 @@ def test_timing_decoder_repairs_short_dropout_inside_dash() -> None:
     assert [message.text for message in messages] == ["KO6FQY"]
 
 
+def test_timing_decoder_preserves_field_shortened_intra_symbol_gaps() -> None:
+    """A real 60 ms gap at 13 WPM is not a receiver dropout.
+
+    These durations reproduce the connected KO6FQY attempt after the 20 ms
+    tone detector's attack/release hysteresis: marks occupied the 80/260 ms
+    bands, ordinary gaps were 60 ms, character gaps 140 ms, and word gaps
+    500 ms.  The former cleanup used an ambiguous 129 ms preliminary unit and
+    merged ordinary separators into roughly 620 ms marks, yielding ``?Q??``.
+    """
+
+    decoder = MorseTimingDecoder(initial_wpm=13)
+    text_to_morse = {
+        character: pattern for pattern, character in MORSE_TO_TEXT.items()
+    }
+    words = "KO6FQY JOIN NORCALCYBER.IO! KO6FQY".split()
+    for word_index, word in enumerate(words):
+        for character_index, character in enumerate(word):
+            for mark_index, mark in enumerate(text_to_morse[character]):
+                decoder.feed(True, 0.080 if mark == "." else 0.260)
+                decoder.feed(False, 0.060)
+            if character_index != len(word) - 1:
+                decoder.feed(False, 0.080)
+        if word_index != len(words) - 1:
+            decoder.feed(False, 0.360)
+
+    messages = decoder.feed(False, 1.1)
+
+    assert [message.text for message in messages] == [
+        "KO6FQY JOIN NORCALCYBER.IO! KO6FQY"
+    ]
+    assert decoder.last_attempt_rejection is None
+    assert decoder.last_attempt_unit_ms is not None
+    assert 75.0 <= decoder.last_attempt_unit_ms <= 100.0
+
+
 def test_rejected_noise_cannot_retrain_decoder_to_impossible_slow_speed() -> None:
     decoder = MorseTimingDecoder(initial_wpm=13)
     initial_unit = decoder.unit_seconds

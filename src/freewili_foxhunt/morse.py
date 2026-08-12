@@ -168,6 +168,17 @@ class MorseTimingDecoder:
     ) -> tuple[list[float], list[float]]:
         """Merge receiver clicks/dropouts shorter than a plausible Morse dot."""
 
+        # Cleaning must not use a newly fitted *slower* unit as its dropout
+        # threshold.  On the connected 13 WPM beacon, detector hysteresis
+        # shortened ordinary intra-symbol gaps to about 60 ms.  An ambiguous
+        # preliminary fit drifted to 129 ms, treated those real gaps as
+        # dropouts, and merged adjacent marks into impossible 620 ms runs.
+        # Anchor cleanup to the already-established speed when it is faster;
+        # only a no-tone run below 60% of that unit is safe to erase.  This
+        # still repairs the physically modeled 33 ms dropout at 20 WPM while
+        # preserving the observed 60 ms separators at 13 WPM.
+        cleanup_unit = min(unit, self.unit_seconds)
+
         runs: list[list[float | bool]] = []
         for index, mark in enumerate(self._marks):
             runs.append([True, mark])
@@ -181,7 +192,7 @@ class MorseTimingDecoder:
                 duration = float(runs[index][1])
                 left_same = bool(runs[index - 1][0]) == (not is_tone)
                 right_same = bool(runs[index + 1][0]) == (not is_tone)
-                threshold = unit * (0.65 if is_tone else 0.78)
+                threshold = cleanup_unit * (0.55 if is_tone else 0.60)
                 if duration >= threshold or not (left_same and right_same):
                     continue
                 merged = (
@@ -192,11 +203,19 @@ class MorseTimingDecoder:
                 runs[index - 1 : index + 2] = [[not is_tone, merged]]
                 changed = True
                 break
-        while runs and bool(runs[0][0]) and float(runs[0][1]) < unit * 0.55:
+        while (
+            runs
+            and bool(runs[0][0])
+            and float(runs[0][1]) < cleanup_unit * 0.55
+        ):
             runs.pop(0)
             if runs and not bool(runs[0][0]):
                 runs.pop(0)
-        while runs and bool(runs[-1][0]) and float(runs[-1][1]) < unit * 0.55:
+        while (
+            runs
+            and bool(runs[-1][0])
+            and float(runs[-1][1]) < cleanup_unit * 0.55
+        ):
             runs.pop()
             if runs and not bool(runs[-1][0]):
                 runs.pop()
@@ -241,11 +260,18 @@ class MorseTimingDecoder:
             timing_scores.append(
                 max(0.0, 1.0 - abs(gap_ratio - expected_gap) / 1.25)
             )
-            if gap_ratio >= 5.0:
+            # The 20 ms tone detector's attack/release hysteresis compresses
+            # over-air separator ratios: the connected 13 WPM beacon produced
+            # stable clusters near 0.7 (inside a character), 1.6 (between
+            # characters), and 5.8 (between words).  Conservative midpoints
+            # at 1.5 and 4.0 preserve those three clusters.  Confidence still
+            # scores against ideal 1/3/7 timing, so merely relaxing a boundary
+            # cannot promote noisy text through the quality gate.
+            if gap_ratio >= 4.0:
                 finish_character()
                 if characters and characters[-1] != " ":
                     characters.append(" ")
-            elif gap_ratio >= 2.0:
+            elif gap_ratio >= 1.5:
                 finish_character()
         finish_character()
 
