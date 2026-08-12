@@ -69,6 +69,9 @@ class DecodedMessage:
 class MorseTimingDecoder:
     """Convert a debounced tone/no-tone stream into complete Morse messages."""
 
+    MIN_UNIT_SECONDS = 1.2 / 30.0
+    MAX_UNIT_SECONDS = 1.2 / 8.0
+
     def __init__(self, initial_wpm: float = 13.0) -> None:
         self.initial_unit_seconds = 1.2 / initial_wpm
         self.reset()
@@ -80,6 +83,27 @@ class MorseTimingDecoder:
         self._marks: list[float] = []
         self._gaps: list[float] = []
         self._signal_evidence: list[float] = []
+        self.last_attempt_text: str | None = None
+        self.last_attempt_confidence: float | None = None
+        self.last_attempt_timing_confidence: float | None = None
+        self.last_attempt_signal_confidence: float | None = None
+        self.last_attempt_known_confidence: float | None = None
+        self.last_attempt_rejection: str | None = None
+        self.last_attempt_mark_count = 0
+        self.last_attempt_gap_count = 0
+        self.last_attempt_mark_range_ms: tuple[int, int, int] | None = None
+        self.last_attempt_gap_range_ms: tuple[int, int, int] | None = None
+        self.last_attempt_unit_ms: float | None = None
+
+    @staticmethod
+    def _duration_summary_ms(values: list[float]) -> tuple[int, int, int] | None:
+        if not values:
+            return None
+        return (
+            round(min(values) * 1000.0),
+            round(median(values) * 1000.0),
+            round(max(values) * 1000.0),
+        )
 
     @staticmethod
     def _trimmed_mean(values: list[float]) -> float:
@@ -110,7 +134,11 @@ class MorseTimingDecoder:
             candidates.extend((duration, duration / 3.0))
         for duration in gaps:
             candidates.extend((duration, duration / 3.0, duration / 7.0))
-        candidates = [value for value in candidates if 0.035 <= value <= 0.25]
+        candidates = [
+            value
+            for value in candidates
+            if self.MIN_UNIT_SECONDS <= value <= self.MAX_UNIT_SECONDS
+        ]
         if not candidates:
             return self.unit_seconds, 0.0
 
@@ -126,7 +154,9 @@ class MorseTimingDecoder:
                 )
             # A small continuity term breaks genuinely ambiguous all-dot or
             # all-dash samples without overpowering the message evidence.
-            continuity = abs(unit - self.unit_seconds) / max(0.035, self.unit_seconds)
+            continuity = abs(unit - self.unit_seconds) / max(
+                self.MIN_UNIT_SECONDS, self.unit_seconds
+            )
             return self._trimmed_mean(residuals) + continuity * 0.15
 
         unit = min(candidates, key=score)
@@ -179,10 +209,16 @@ class MorseTimingDecoder:
             return None
         unit, _ = self._estimate_unit()
         unit = max(self.unit_seconds * 0.60, min(self.unit_seconds * 1.40, unit))
+        unit = max(self.MIN_UNIT_SECONDS, min(self.MAX_UNIT_SECONDS, unit))
         marks, gaps = self._clean_runs(unit)
         unit, fit_confidence = self._estimate_unit(marks, gaps)
         unit = max(self.unit_seconds * 0.60, min(self.unit_seconds * 1.40, unit))
-        self.unit_seconds = self.unit_seconds * 0.25 + unit * 0.75
+        unit = max(self.MIN_UNIT_SECONDS, min(self.MAX_UNIT_SECONDS, unit))
+        self.last_attempt_mark_count = len(marks)
+        self.last_attempt_gap_count = len(gaps)
+        self.last_attempt_mark_range_ms = self._duration_summary_ms(marks)
+        self.last_attempt_gap_range_ms = self._duration_summary_ms(gaps)
+        self.last_attempt_unit_ms = unit * 1000.0
         characters: list[str] = []
         symbols: list[str] = []
         timing_scores: list[float] = []
@@ -239,13 +275,33 @@ class MorseTimingDecoder:
         # evidence that at least one is wrong. Do not present either as fact.
         if len(callsigns) >= 2 and callsigns[0] != callsigns[-1]:
             confidence *= 0.70
+        self.last_attempt_text = text
+        self.last_attempt_confidence = confidence
+        self.last_attempt_timing_confidence = timing_confidence
+        self.last_attempt_signal_confidence = signal_confidence
+        self.last_attempt_known_confidence = known_confidence
         self._marks.clear()
         self._gaps.clear()
         self._signal_evidence.clear()
         # A valid Morse lookup is not sufficient evidence.  Ambiguous timing
         # is withheld here rather than reported as a false callsign at 100%.
-        if useful < 4 or known_confidence < 0.75 or confidence < 0.78:
+        rejection_reasons: list[str] = []
+        if useful < 4:
+            rejection_reasons.append("too-short")
+        if known_confidence < 0.75:
+            rejection_reasons.append("unknown-patterns")
+        if confidence < 0.78:
+            rejection_reasons.append("low-confidence")
+        self.last_attempt_rejection = ",".join(rejection_reasons) or None
+        if rejection_reasons:
             return None
+        # A rejected/noisy candidate must never retrain the persistent speed
+        # model. Earlier builds updated this value before the quality gate, so
+        # repeated garbage could walk a 13 WPM decoder down to about 6 WPM and
+        # eventually suppress every real beacon dot. Whole-message fitting
+        # handles abrupt valid speed changes; retain timing only from a
+        # candidate that has actually passed every quality check.
+        self.unit_seconds = self.unit_seconds * 0.25 + unit * 0.75
         return DecodedMessage(
             text=text,
             confidence=confidence,

@@ -33,6 +33,8 @@ def test_timing_decoder_decodes_callsign_and_waits_for_message_gap() -> None:
 
     assert [message.text for message in messages] == ["KO6FQY"]
     assert messages[0].confidence == 1.0
+    assert decoder.last_attempt_text == "KO6FQY"
+    assert decoder.last_attempt_rejection is None
 
 
 def test_timing_decoder_recovers_complete_configured_beacon_message() -> None:
@@ -140,6 +142,27 @@ def test_timing_decoder_repairs_short_dropout_inside_dash() -> None:
     messages = decoder.feed(False, 1.3)
 
     assert [message.text for message in messages] == ["KO6FQY"]
+
+
+def test_rejected_noise_cannot_retrain_decoder_to_impossible_slow_speed() -> None:
+    decoder = MorseTimingDecoder(initial_wpm=13)
+    initial_unit = decoder.unit_seconds
+
+    # Six dashes without a character gap are not a valid Morse character. In
+    # the field, repeated candidates like this previously updated the learned
+    # unit before being rejected, compounding from 13 WPM to about 6 WPM.
+    for _ in range(8):
+        slower_unit = decoder.unit_seconds * 1.40
+        decoder._marks = [slower_unit * 3.0] * 6
+        decoder._gaps = [slower_unit] * 5
+        decoder._signal_evidence = [0.1] * 6
+        assert decoder._finish_message() is None
+
+    assert decoder.unit_seconds == initial_unit
+    assert MorseTimingDecoder.MIN_UNIT_SECONDS <= decoder.unit_seconds
+    assert decoder.unit_seconds <= MorseTimingDecoder.MAX_UNIT_SECONDS
+    assert decoder.last_attempt_text == "?"
+    assert decoder.last_attempt_rejection == "too-short,unknown-patterns,low-confidence"
 
 
 def fm_iq(
