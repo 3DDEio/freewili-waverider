@@ -8,6 +8,7 @@ __pycache__/
 /.vscode/
 /build/
 /dist/
+/device-backups/
 *.tar.gz
 *.zip
 /research/*
