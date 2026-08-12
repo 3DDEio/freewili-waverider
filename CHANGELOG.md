@@ -23,6 +23,9 @@ All notable public changes to WaveRider are recorded here. The format follows
 
 ### Changed
 
+- The Apps-menu file is now `/apps/Radio/WaveRider.uf2`, matching the filename
+  stem shown by current v07 menus. A verified upgrade removes the obsolete
+  Radio filename and removes `/apps/waverider` only after proving it is empty.
 - Continuous IQ collection now runs independently of FFT/Morse processing with
   a bounded queue and visible overrun failure instead of dropped CW timing.
 - Morse carrier hysteresis, separator preservation, whole-message timing fit,

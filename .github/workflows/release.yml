@@ -49,16 +49,16 @@ jobs:
           printf '%s  %s\n' \
             d139e07182836a94244285f441ba8355ff7e953a58f03090837d203426d48e3e \
             vendor/debian-arm64/rtl-sdr_2.0.2-2+b1_arm64.deb | sha256sum -c -
-      - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_display.uf2
+      - run: python wilibsp/tools/check_app_uf2.py native/dist/WaveRider.uf2
       - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_installer.uf2
       - run: sh deploy/setup-native-ci-linux.sh
       - name: Rebuild and compare release UF2 files
         run: |
           mkdir -p build/committed-native
-          cp native/dist/waverider_display.uf2 build/committed-native/
+          cp native/dist/WaveRider.uf2 build/committed-native/
           cp native/dist/waverider_installer.uf2 build/committed-native/
           BUILD_DIR="$GITHUB_WORKSPACE/build/release-native" sh deploy/build-native-apps.sh
-          cmp build/committed-native/waverider_display.uf2 native/dist/waverider_display.uf2
+          cmp build/committed-native/WaveRider.uf2 native/dist/WaveRider.uf2
           cmp build/committed-native/waverider_installer.uf2 native/dist/waverider_installer.uf2
       - run: sha256sum -c native/dist/SHA256SUMS
       - run: sh deploy/build-release.sh
@@ -70,7 +70,7 @@ jobs:
         with:
           subject-path: |
             dist/*.tar.gz
-            native/dist/waverider_display.uf2
+            native/dist/WaveRider.uf2
             native/dist/waverider_installer.uf2
             native/dist/SHA256SUMS
       - name: Publish GitHub release
@@ -83,7 +83,7 @@ jobs:
           esac
           gh release create "$GITHUB_REF_NAME" \
             dist/*.tar.gz dist/*.sha256 \
-            native/dist/waverider_display.uf2 \
+            native/dist/WaveRider.uf2 \
             native/dist/waverider_installer.uf2 \
             native/dist/SHA256SUMS \
             --generate-notes $prerelease

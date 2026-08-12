@@ -185,7 +185,7 @@ this keeps saved lists, settings, and message history; add `--purge` to remove
 that CM0 data. The native Apps-menu UF2 is stored separately on the Main SD and
 is not removed by the Linux script. WiliBSP currently provides `install-app`
 but no matching remove command, so delete
-`/apps/Radio/waverider_display.uf2` only through a supported Main-SD file view.
+`/apps/Radio/WaveRider.uf2` only through a supported Main-SD file view.
 Do not rewrite Display firmware to uninstall WaveRider.
 
 ## Install from a release

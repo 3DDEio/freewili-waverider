@@ -314,16 +314,24 @@ Brand migration begins after the connected device demonstrates:
   diagnostic snapshot. Add a guard to the host mailbox tools so they refuse to
   probe an active WaveRider session unless an explicit maintenance override is
   supplied.
-- [x] Install the native app at `/apps/Radio/waverider_display.uf2`, label it
-  **WaveRider**, and expose it at **Apps → Radio → WaveRider**. The upgraded
-  self-installer verifies the new file before removing the former
-  `/apps/waverider/waverider_display.uf2` copy. Host USB SD enumeration is
+- [x] Install the native app at `/apps/Radio/WaveRider.uf2` and expose it at
+  **Apps → Radio → WaveRider**. Connected-device observation showed v07 renders
+  the UF2 filename stem even when the embedded metadata says `WaveRider`, so
+  the friendly filename is now enforced by the release and installer. The
+  upgraded self-installer verifies the new file before removing the former
+  `/apps/Radio/waverider_display.uf2` and
+  `/apps/waverider/waverider_display.uf2` copies. It enumerates the legacy
+  `/apps/waverider` category and removes it only when it is empty. Host USB SD enumeration is
   unreliable on the test Mac, so a verified SRAM-only self-installer now
   writes the embedded app through Main's supported SDFS service and checks the
   final byte count.
   Both freshly rebuilt UF2 artifacts pass the BSP's SRAM-only safety gate. The
   connected self-installer wrote and byte-count-verified the file, and Main
-  launched that exact stored copy from the Apps menu. The installer now halts
+  launched that exact stored copy from the Apps menu. On 2026-08-12 the
+  migration log confirmed the new `/apps/Radio/WaveRider.uf2` copy, removal of
+  `/apps/Radio/waverider_display.uf2`, absence of the former legacy UF2, and
+  guarded removal of the now-empty `/apps/waverider` category; Main then
+  launched the friendly-name path successfully. The installer now halts
   both display cores and quiesces peripheral DMA before `load_image` plus
   `verify_image`, preventing an old keyboard DMA ring from mutating the loaded
   installer during its fail-closed comparison.
@@ -331,7 +339,7 @@ Brand migration begins after the connected device demonstrates:
   `dist/freewili-foxhunt-0.1.0.tar.gz` includes the final CM0 cadence code,
   native Display UF2, volatile self-installer, offline RTL-SDR packages,
   deployment helpers, and public documentation. The archived `display.py` and
-  `waverider_display.uf2` hashes match the working tree, the archive checksum
+  `WaveRider.uf2` hashes match the working tree, the archive checksum
   file verifies, and a clean extraction passes the native installer's SRAM-only
   dry-run gate. Public prerelease
   [`v0.1.0-beta.1`](https://github.com/3DDEio/freewili-waverider/releases/tag/v0.1.0-beta.1)

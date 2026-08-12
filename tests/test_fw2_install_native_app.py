@@ -86,7 +86,7 @@ def test_openocd_transaction_loads_and_verifies_without_programming(tmp_path):
 
 
 def test_committed_native_release_artifacts_pass_fail_closed_gates():
-    assert inspect_display_uf2(ROOT / "native/dist/waverider_display.uf2") == "SRAM"
+    assert inspect_display_uf2(ROOT / "native/dist/WaveRider.uf2") == "SRAM"
     entry, segments = inspect_volatile_elf(
         ROOT / "native/dist/waverider_installer.elf"
     )
