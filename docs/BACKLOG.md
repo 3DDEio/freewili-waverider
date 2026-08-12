@@ -451,6 +451,30 @@ Brand migration begins after the connected device demonstrates:
   decoder/runtime/history/settings/Pocket Alert tests pass. Deploy this second
   revision before continuing the over-air efficacy count.
 
+  **Preliminary control-run finding:** after deploying the second debounce
+  revision, three complete 147.500 MHz beacon transmissions produced no popup
+  or history record. A service-stopped diagnostic then proved WaveRider had
+  actually remained tuned to 144.300 MHz: the decoder recorded zero marks,
+  zero gaps, and no attempt while preserving its 800 Hz tone target and
+  92.3 ms / 13 WPM timing model. Treat this as successful preliminary
+  off-frequency rejection, not as a 147.500 MHz efficacy result. The next run
+  must confirm that the large active-frequency readout says 147.500 MHz before
+  the host leaves Main USB idle and starts the beacon.
+
+  **Third corrected-run finding:** after physically confirming the large
+  active-frequency readout at 147.500 MHz, three controlled transmissions
+  still produced no verified message. The final attempt was
+  `TATY?IEKT?BSTT?TTAKT` at confidence 0.72 and was correctly rejected as
+  low-confidence. RF/tone acquisition was healthy (800 Hz, signal confidence
+  1.0) and the persistent timing model remained 92.3 ms / 13 WPM, but only 48
+  marks and 47 gaps survived from the intended 108/107. The remaining merge
+  occurred because three-window release debounce swallowed genuine 60 ms
+  field separators. Release now accepts a transition after two 20 ms windows;
+  the bounded timing cleaner rejoins 40 ms fades while preserving 60 ms real
+  gaps. A complete-payload field regression proves all 108 marks and 107 gaps
+  survive alongside the existing dash-fade test, and all 65 focused decoder,
+  IQ, runtime, history, settings, display, and Pocket Alert tests pass.
+
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
   windows, adapts
