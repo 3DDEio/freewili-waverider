@@ -20,6 +20,13 @@ before relying on it in a field event.
 - **Receive only.** WaveRider never transmits and cannot key a radio.
 - **No received audio yet.** The speaker and headphone codec work, but the
   required high-rate CM0-to-Display audio bridge has not been implemented.
+- **Morse decoding is experimental.** WaveRider can acquire an NFM Morse audio
+  tone across approximately 450–1,150 Hz on the selected frequency. Candidate text is retained
+  internally, but a message is not shown as detected until at least three
+  recent receptions agree. Noisy, weak, overlapping, or differently pitched
+  signals may still be withheld or decode incorrectly. Morse has no letter
+  case, so detected text is shown uppercase. WaveRider does not invent or
+  dictionary-correct uncertain characters.
 - **Relative RSSI, not calibrated dBm.** Readings are dBFS and are meaningful
   for comparing signal strength while antenna, gain, and attenuation remain
   consistent.
@@ -28,6 +35,12 @@ before relying on it in a field event.
   the screen. Real off-frequency peaks are intentionally not mirrored.
 - **Linux/SDR startup is not instant.** The app displays startup progress and
   receiver health while CM0 Linux and the RTL-SDR become ready.
+- **Bridge recovery is automatic but bounded.** If the Main-to-Display link is
+  lost after WaveRider has been live, the app reopens its local transport and
+  makes one best-effort Main-controller-only reset request. CM0 Linux and SDR
+  capture are intentionally left running. A deeply wedged Main route cannot
+  receive its own reset request; WaveRider then shows **Main Bridge Locked** and
+  requires Hardware → Settings → Software Reset (or a power cycle).
 - **Live receiver mode and the CM0 maintenance serial console are mutually
   exclusive** on the tested FW2 v07 hardware because the CM0 has one USB
   controller.
@@ -49,7 +62,8 @@ and the [User guide](docs/USER_GUIDE.md) for normal operation.
 - RTL-SDR connection and live-sample health state.
 - Relative RSSI in dBFS with an explicitly labeled waterfall scale.
 - A continuous blue-to-yellow RSSI range with a moving live-value pointer.
-- A three-second WaveRider whale-and-sound-wave startup splash.
+- A three-second animated WaveRider splash with a detailed swimming orca and
+  moving sound-wave surf.
 - A short waterfall calibration followed by a stable 30 dB color window, so
   antenna movement remains comparable across time.
 - Low-latency native IQ capture targeting 10 analyses per second, with
@@ -64,13 +78,20 @@ and the [User guide](docs/USER_GUIDE.md) for normal operation.
 - Stock Apps-menu installation without replacing Main or Display firmware.
 - A maintenance profile that restores the CM0 USB serial console.
 - Seven-LED startup, ready, RSSI, and fault feedback.
-- A **Pocket Alert** status page and threshold design are retained for future
-  haptic support. Hardware output is disabled in public builds: the connected
-  FX0177 did not vibrate even though the experimental GPIO46 pad completed all
-  requested transitions, and FreeWili has not published an authoritative motor
-  driver or waveform specification. The Info page includes a deliberate,
-  input-only weak-pull probe for GPIO31/36/44/46; it never enables output drive.
+- A **Pocket Alert** status page with an adjustable threshold, three-pulse
+  alert, 30-second cooldown, 3 dB re-arm hysteresis, and manual Test action.
+  Its Display GPIO46 active-high, 12 mA driver and 150/80 ms timing now match
+  the implementation shipped in FreeWili's Meshtastic port. Physical motor
+  validation remains required on the target board revision.
 - Plain-language startup, refresh, and receiver-fault status pages.
+- Live adaptive-pitch NFM Morse detection with an eight-second `MESSAGE DETECTED`
+  overlay plus a frequency-grouped **MSGS** history. The CM0 stores 100
+  observations with frequency, last-seen time, repeat count, and confidence;
+  the native viewer restores the latest 16 verified records after reconnect.
+  A confirmed Clear removes both verified messages and hidden candidates. Dot timing
+  is fitted across the complete message, and repeated receptions vote by their
+  actual occurrence count. Only bounded decoded ASCII—not PCM—crosses the
+  mailbox, so waterfall and controls retain priority.
 
 This software receives only. It does not turn the RTL-SDR into a transmitter.
 
@@ -129,19 +150,18 @@ live, the installer restores maintenance mode and the serial console returns.
 ## On-device controls
 
 - Gray — **Lists:** open the saved-frequency library and live-list manager.
-- Yellow — **Audio:** open the audio status page. Received audio remains muted
-  until the planned PCM bridge is implemented.
+- Yellow — **MSGS:** reopen and browse recent decoded CW observations.
 - Green — **Next:** tune the next saved frequency.
 - Blue — **Previous:** tune the preceding saved frequency.
 - Red — **Refresh:** verify the CM0/SDR connection, restart capture, display
   status, and repaint the waterfall after a new row arrives.
 - D-pad Up/Down/Left/Right: browse and immediately tune list entries on the live
   screen. Check applies the highlighted entry.
-- Page (or a tap on the RSSI scale) — **Pocket Alert:** view haptic hardware
-  availability and open the bounded weak-pull pin diagnostic with Red **Info**.
+- Page (or a tap on the RSSI scale) — **Pocket Alert:** enable/disable the
+  threshold alert, adjust its dBFS threshold, and run a three-pulse manual Test.
 
-Pocket Alert cannot be enabled in this release. Visual RSSI, waterfall, and
-seven-LED feedback remain active.
+Pocket Alert is source-verified but still beta hardware functionality. Confirm
+the manual Test on your FreeWili revision before relying on eyes-free alerts.
 
 In Lists:
 
@@ -151,6 +171,14 @@ In Lists:
 - Blue **Tune** adds the selected value to Live when necessary and tunes it.
 - Red **Delete** asks for confirmation, then removes the saved value and its
   Live membership.
+
+In MSGS:
+
+- Up/Down or **PREV**/**NEXT** selects a frequency and shows its message count.
+- Green, Check, or **OPEN** opens only the messages observed on that frequency.
+- **FREQS** returns from a message to the grouped frequency summary.
+- Red **CLEAR** opens a confirmation page. Check clears every verified message
+  and hidden candidate; Red, Gray, Back, or **CANCEL** preserves them.
 
 In New Frequency:
 
@@ -162,6 +190,23 @@ In New Frequency:
 
 Custom list names and descriptive labels currently require the maintenance
 console; exact frequencies can be added and removed entirely on-device.
+
+## Optional device maintenance: quiet and dark startup
+
+This is **not a WaveRider feature or installation step**. WaveRider, its
+installer, and its launcher never modify the stock Display firmware or change
+the device's startup lights or sounds. Most users should install WaveRider
+without applying this separate, device-specific maintenance patch.
+
+The stock LED animation and spoken **Free Wili** boot clip run before
+WaveRider, so the app itself cannot suppress them. FW2 v07 omits the relevant
+controls from its visible Settings list. The failed settings-file route is now
+blocked. A version-locked Display effect-point patch has been deployed to the
+connected FX0177 unit and independently read back; verified stock recovery is
+retained. The voice suppression is physically proven; V3 LED cold-boot
+acceptance is still pending. See
+[`docs/NIGHT_DEFAULTS.md`](docs/NIGHT_DEFAULTS.md) for the limitation, exact
+evidence, and rollback boundary.
 
 ## Return to maintenance mode
 

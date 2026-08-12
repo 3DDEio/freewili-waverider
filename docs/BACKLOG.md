@@ -13,6 +13,14 @@ hardware bring-up.
 
 ## Gate: responsive field sampling
 
+External test beacon recovery (2026-08-11): the XIAO ESP32-C3's persistent
+`code.py` had been replaced by a 22-byte `print("Hello World!")` program. The
+separate recovery package now configures its healthy SA868 for low-power
+147.500 MHz operation and completed one error-free transmit/idle software
+cycle. Confirm over-the-air reception before using it to close WaveRider's
+known-RF validation gates; transmitter firmware remains separate from
+WaveRider.
+
 Brand migration begins after the connected device demonstrates:
 
 - RSSI response within one second of antenna movement;
@@ -35,10 +43,14 @@ Brand migration begins after the connected device demonstrates:
   upgrade compatibility unless a migration provides explicit aliases and
   rollback coverage.
 - [x] Add a three-second native 480 x 320 WaveRider splash. The current build
-  procedurally draws the surfing whale and sound-wave mark, so launch no longer
-  depends on a compatible Main-SD image. Tapping the `WaveRider` title replays
-  the splash for field verification; legacy converter/uploader assets remain
-  available for older builds.
+  procedurally animates a gently bobbing, tail-kicking orca above three
+  phase-shifted sound-wave surf bands. The detailed silhouette includes a
+  cyan rim, white eye patch/belly/chin, gray saddle, tall dorsal, pectoral fin,
+  and articulated flukes, so launch no longer depends on a
+  compatible Main-SD image. The calm 10 FPS loop remains recovery-responsive
+  and measures its three seconds against wall time rather than adding render
+  time. Tapping the `WaveRider` title replays the splash for field verification;
+  legacy converter/uploader assets remain available for older builds.
 
 ## Current milestone: original-mockup parity
 
@@ -83,7 +95,7 @@ Brand migration begins after the connected device demonstrates:
   status and repainted the waterfall. It is now superseded by the library
   workflow below; the proven Next, Previous, and Refresh actions are retained.
 - [ ] Add the full-screen Frequency Library and revised field controls: Gray
-  **Lists**, Yellow **Audio**, Green **Next**, Blue **Previous**, and Red
+  **Lists**, Yellow **Messages**, Green **Next**, Blue **Previous**, and Red
   **Refresh** on Live; Back, New, Live +/-, Tune, and confirmed Delete inside
   Lists. Saved storage is atomically persisted up to 100 unique values while
   the mailbox-bounded Live rotation remains 16. Paging, Live membership, Tune,
@@ -114,7 +126,7 @@ Brand migration begins after the connected device demonstrates:
   empty. WaveRider now has a loadable, SRAM-only native Display app that reads
   the supported `uartkbd` driver directly and exchanges compact commands/data
   with CM0 through Main's app-signal mailbox. The complete host/deployment
-  suite passes as part of the current 111-test regression set. A
+  suite passes as part of the current 143-test regression set. A
   connected synthetic-input test proved Green changes the selected row and
   retunes the SDR from 147.495 to 147.545 MHz through the complete
   Display-to-Main-to-CM0 mailbox. Direct keyboard diagnostics show healthy,
@@ -132,8 +144,72 @@ Brand migration begins after the connected device demonstrates:
   When live data becomes stale for three seconds, the same yellow LED fault
   state now replaces the waterfall with **Receiver Needs Attention**, the CM0
   and SDR state, last-row age, command state, and a plain Refresh/USB action.
-  A recovered SDR row restores the waterfall automatically. Validate those
-  states through one final cold launch and deliberate SDR fault.
+  A recovered SDR row restores the waterfall automatically. A fresh-boot test
+  then exposed a distinct v07 race: RTL-SDR sampling was live at 5.32 rows/s,
+  but Main retained a routed `TYPE_SHELL` login and blocked Display app-signal
+  traffic. WaveRider now waits through a 20-second boot grace and, only if the
+  Display has never connected, hangs up the exact bridge-owned `login -f pi`
+  process during a bounded 90-second startup window. The bridge's existing
+  `SHELL_EXIT` notice releases Main without restarting Linux, the bridge, or
+  the SDR. An explicit maintenance inhibit prevents deployment tools from
+  being mistaken for an orphaned boot shell. The installed `app.py` and
+  `bridge_recovery.py` hashes match the working tree, the service is active,
+  and one non-shell mailbox sample reported `wr_ready=1`, `wr_seq=64`, and
+  live RSSI. A subsequent physical launch exposed an approximately two-minute
+  healthy startup that looked like a fault because all seven LEDs blinked
+  amber. The CM0 service no longer orders itself after the complete
+  `multi-user.target`; it can start as soon as `fwcm0-bridge.service` is ready.
+  RTL-SDR capture now starts before the Display mailbox handshake, and warm
+  relaunches skip 32 redundant app-signal creation round trips when the v1
+  protocol marker is already present. The native startup display now advances
+  through six measured subsystem milestones with dim, steady green LEDs from
+  left to right; the seventh LED is earned by the first live SDR row. Yellow
+  flashing is reserved for a real post-startup data fault. Repeat one untouched
+  cold launch with a stopwatch to close this gate and record time-to-first-row.
+  The first timed physical observation was substantially faster and reached
+  four green milestones immediately before entering the waterfall. Because
+  the remaining milestones completed between LED refreshes, the final build
+  now holds all seven green for three seconds as an explicit ready confirmation
+  while the waterfall renders normally; it does not artificially delay startup.
+  A later post-connect failure proved that startup-only shell cleanup was not a
+  complete runtime recovery strategy: the native app could remain on **Waiting
+  for CM0 Bridge** indefinitely after losing its OneWili transport. The display
+  app now classifies only timeout/I/O/protocol failures as a broken transport,
+  reopens that transport after three seconds, and requests at most one Main-only
+  software reset after fifteen seconds. A missing app signal during healthy CM0
+  startup does not enter this reset path. CM0 Linux and the SDR are preserved.
+  Host regression and SRAM packaging gates pass. Connected validation against
+  the stalled physical unit proved the deepest v07 lock cannot receive its own
+  software-reset request over the jammed OneWili route. The app now replaces
+  indefinite waiting with **Main Bridge Locked** and exact physical reset
+  guidance. Automatic out-of-band Main reset remains open; do not manipulate
+  the power-coprocessor's reserved reset bits without a board-revision-safe
+  vendor contract. That validation also caught partial mailbox replies: cached
+  list/settings signals could still answer while the committed live-row
+  `wr_seq` path was dead, repeatedly clearing the recovery timer. Recovery
+  health is now owned only by `wr_seq`; secondary signal reads can no longer
+  hide a dead receiver mailbox. Startup also queues one idempotent Refresh at
+  30 seconds without a complete row and changes to **CM0 Data Stalled** at 60
+  seconds, so a responsive-but-stale mailbox cannot masquerade as endless
+  boot progress. Connected clean-power-cycle validation then reached live mode
+  at approximately 37 seconds: the display reported **CM0 LINK**, successive
+  captures changed from -23.2 to -64.7 dBFS, and new waterfall history was
+  visible. This confirms clean startup recovery; the vendor-bound out-of-band
+  reset limitation for an already deeply wedged Main route remains documented.
+  Physical Pocket Alert testing then exposed two unrelated operations that
+  could make the recovered system look dead: entering the page reconstructed
+  and resent Main's complete awake mask merely to suppress the front LED, and
+  saving one alert setting republished the entire 16-frequency mailbox. A live
+  power snapshot can omit device-managed USB-hub/CM0 bits, so the former could
+  interrupt the receiver route; the latter blocked command acknowledgements
+  behind unnecessary traffic. Both operations are removed. Pocket Alert now
+  changes no power rails and persists its setting without a full-list rebuild.
+  The user clarified that the visible failure began specifically on **Test**:
+  its blocking three-pulse loop stopped servicing OneWili for roughly 690 ms,
+  enough to discard live traffic on the narrow v07 route. Manual Test now uses
+  the existing nonblocking sequencer, preserving three 150 ms pulses and 80 ms
+  gaps while buttons, app signals, and SDR rows continue to be serviced.
+  Repeat Page, Enable/threshold, Test, Back, and Refresh on the fixed build.
 - [x] Install the native app at `/apps/waverider/waverider_display.uf2` and
   expose it in the stock Apps menu. Host USB SD enumeration is unreliable on
   the test Mac, so a verified SRAM-only self-installer now writes the embedded
@@ -196,16 +272,25 @@ Brand migration begins after the connected device demonstrates:
   after a fresh device photo; the 480 x 320 connected framebuffer comparison
   now passes palette and splash review.
 
-## Subsequent features
+## Separate device-maintenance record — not WaveRider
 
-- [ ] Add opt-in Pocket Alert vibration for eyes-free hunting. The dormant
-  design uses three nonblocking
-  450 ms pulses, a fixed 30-second cooldown, and a 3 dB fall-and-rise re-arm
+- [x] The independent, opt-in FW2 v07 quiet/dark startup modification is
+  physically proven after a complete power cycle: no stock LED animation, no
+  spoken **Free Wili** clip, and normal application operation. It is never
+  bundled with or invoked by WaveRider installation or launch. The hash-locked
+  V3 procedure and complete rollback boundary are maintained separately in
+  `docs/FW2_V07_STARTUP_PATCH.md`.
+
+## Subsequent WaveRider features
+
+- [ ] Add opt-in Pocket Alert vibration for eyes-free hunting. The design uses
+  three nonblocking 150 ms pulses separated by 80 ms gaps, a fixed 30-second
+  cooldown, and a 3 dB fall-and-rise re-arm
   requirement. Page or the RSSI scale opens a dedicated screen with persistent
   enable/disable, -70..-10 dBFS threshold adjustment, live RSSI/state, and a
   manual Test action. CM0 stores settings atomically and packs them into the
   existing `wr_count` commit so Main's 32-signal mailbox limit is preserved.
-  All 118 host tests and the native build pass. Connected validation opened the
+  All 143 host tests and the native build pass. Connected validation opened the
   screen, retained live RSSI updates, invoked Test, round-tripped +1/-1 dB and
   enable/disable through Main and CM0, and confirmed root-owned JSON returned
   to disabled/-50 dBFS/30 seconds. The first physical Test produced no felt
@@ -221,10 +306,15 @@ Brand migration begins after the connected device demonstrates:
   remaining non-live candidates (GPIO31/36/44/46), restoring each pin before
   advancing. Physical results on FX0177: GPIO31 produced no response on two
   passes; GPIO36, GPIO44, and GPIO46 produced no response on one pass each.
-  The complete weak-pull candidate scan is therefore negative. **Blocker:**
-  obtain the authoritative processor,
-  pin, active level, waveform/PWM requirement, power gate, and board-revision
-  population status from FreeWili before restoring hardware output.
+  The complete weak-pull candidate scan was therefore negative. The installed
+  Doom and Meshtastic apps were subsequently copied read-only and inventoried.
+  Meshtastic embeds `github.com/Ytuf/firmware`; its public `freewili-port`
+  branch maps HAP_MOTOR to Display GPIO46, drives it active-high at 12 mA, and
+  runs three 150 ms pulses with 80 ms gaps. Doom independently contains a
+  dedicated PWM haptic driver. WaveRider now matches the Meshtastic GPIO and
+  timing; checksums and source boundaries are in `docs/HAPTIC_EVIDENCE.md`.
+  **Remaining validation:** physically confirm manual Test, threshold crossing,
+  30-second cooldown, 3 dB re-arm, and persistence on the connected board.
 
 - [ ] Complete the seven-visible-LED field feedback pass. The native Display
   app now drives only indices 0..6: all red at launch, all yellow while Linux or
@@ -233,6 +323,10 @@ Brand migration begins after the connected device demonstrates:
   rows flash all seven yellow and Refresh uses a yellow chase. Updates are
   coalesced to 4 Hz and never consume the CM0 waterfall mailbox. Physically
   confirm LED index order, colors, thresholds, and the deliberate fault state.
+  Pocket Alert deliberately lowers the strip from 48/255 to 6/255 brightness
+  while preserving those colors and status patterns. It also clears the safe
+  zone-9 status-LED flag while active, turning off the separate front indicator
+  above Home, and restores that indicator's prior state on exit.
 - [ ] Add real narrow-FM beacon audio with mute, volume, squelch, and output
   routing for onboard speaker, headphone jack, or both. Hardware playback is
   proven in WiliBSP through the NAU88C10 codec at approximately 16 kHz, but the
@@ -242,6 +336,29 @@ Brand migration begins after the connected device demonstrates:
   menu. Audio must default muted, respect the 0.5 W speaker limit, use the BSP
   speaker safety cap and low-power mute state, and shed audio frames instead of
   slowing RSSI, waterfall, controls, or recovery.
+- [ ] Field-validate live Morse message detection. CM0 now removes the known
+  tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
+  windows, adapts
+  dot/dash timing by fitting the complete message, confidence-gates timing,
+  pattern, and tone evidence, and suppresses only duplicate verified popups for
+  30 seconds. At least three recent agreeing receptions are required before a
+  callsign/message becomes user-visible; actual variant occurrence counts now
+  weight consensus, inconsistent bookend callsigns are rejected, and tone
+  acquisition/release hysteresis plus bounded speed adaptation prevent noise
+  from becoming a confident timing model.
+  Native transport uses bounded sequenced six-byte frames; the Display shows
+  an eight-second popup while the waterfall remains live. The CM0 now keeps
+  100 atomic history records, coalesces similar repeats, and restores the
+  newest 16 to a local MSGS viewer with frequency, time, repeats, and quality.
+  The viewer now groups observations by frequency and has a confirmation-gated
+  Clear action that atomically deletes both verified and candidate history.
+  Synthetic 13 and 20 WPM `KO6FQY` decoding passes, timing jitter/outliers are
+  tolerated, inconsistent callsigns and unmodulated carriers are rejected, and
+  non-800 Hz tone acquisition and sub-dot dropout repair pass, and the full
+  host suite covers grouped navigation plus cache/persistence clearing.
+  Partial KO6FQY/domain text has now been observed over air; confirm repeatable
+  recovery of `KO6FQY JOIN NORCALCYBER.IO! KO6FQY` at 147.500 MHz before
+  calling this field-proven.
 - Close-in attenuation/gain workflow for near-field hunting.
 - Calibrated color legend tied to the frozen relative dBFS waterfall scale.
 - Compass-assisted heading sweep and saved hunt observations.

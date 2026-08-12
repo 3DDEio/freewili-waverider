@@ -41,13 +41,16 @@ def test_user_guide_preserves_the_physically_validated_button_map():
 
     for row in (
         "| Gray | Open Lists frequency management |",
-        "| Yellow | Open Audio status and future controls |",
+        "| Yellow | Open decoded-message history |",
         "| Green | Tune the next frequency |",
         "| Blue | Tune the previous frequency |",
         "| Red | Refresh receiver health and restart SDR collection |",
     ):
         assert row in guide
     assert "Live remains limited to 16" in guide
+    assert "open a frequency summary" in guide
+    assert "permanently removes every verified message" in guide
+    assert "hidden candidate" in guide
     assert "`433200`" in guide
     assert "tap the `sdr live` label" in guide.lower()
     assert "press Red **Refresh**" in guide
