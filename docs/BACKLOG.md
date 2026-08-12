@@ -490,9 +490,12 @@ Brand migration begins after the connected device demonstrates:
   confidence 0.928. Two additional controlled receptions agreed exactly.
   Persistent history now contains one verified 147.500 MHz record with 3/3
   evidence and agreement 1.00. Seventy focused decoder/IQ/runtime/history/
-  settings/display/Pocket Alert tests pass. Keep this gate open until ten
-  complete live transmissions, the 144.300 MHz control duration, and physical
-  MSGS grouping/Clear checks are complete.
+  settings/display/Pocket Alert tests pass. Physical recall of that exact
+  decoded message from the MSGS viewer is now confirmed; its payload text has
+  been enlarged and word-wrapped for field readability without reducing the
+  79-character transport limit. Keep this gate open until ten complete live
+  transmissions, the 144.300 MHz control duration, and physical MSGS
+  grouping/Clear checks are complete.
 
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
