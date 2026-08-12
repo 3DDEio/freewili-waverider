@@ -22,10 +22,13 @@ INSTALL_ROOT = "/opt/freewili-foxhunt/src/freewili_foxhunt"
 SERVICE_SOURCE = ROOT / "deploy/freewili-foxhunt.service"
 SERVICE_DESTINATION = "/etc/systemd/system/freewili-foxhunt.service"
 SERVICE_STAGING = "/tmp/freewili-foxhunt.service.waverider-new"
+MAINTENANCE_INHIBIT = "/run/freewili-foxhunt/maintenance-shell"
 MODULES = (
+    "bridge_recovery.py",
     "cm0_transport.py",
     "display.py",
     "app.py",
+    "morse.py",
     "store.py",
     "rtl_iq.py",
     "spectrum.py",
@@ -296,6 +299,13 @@ def main() -> int:
         # full status command plus its output can exceed the routed console's
         # small burst capacity and discard the completion marker.
         shell_ok(port, "stty -echo")
+        # The runtime's boot-only self-heal must never mistake this deliberate
+        # administrative session for an orphaned launcher shell.
+        shell_ok(
+            port,
+            "sudo install -d -m 0755 /run/freewili-foxhunt && "
+            f"sudo touch {MAINTENANCE_INHIBIT}",
+        )
         try:
             if not args.verify_only:
                 shell_ok(port, "sudo systemctl stop freewili-foxhunt.service", timeout=30.0)
@@ -307,7 +317,12 @@ def main() -> int:
                         # though the byte copy succeeds. Rollback needs exact
                         # content, not archive metadata, so use a plain forced
                         # file copy and retain the destination's safe path.
-                        shell_ok(port, f"cp -f {destination} {destination}.waverider-prev")
+                        shell_ok(
+                            port,
+                            f"if test -f {destination}; then "
+                            f"cp -f {destination} {destination}.waverider-prev; "
+                            f"else rm -f {destination}.waverider-prev; fi",
+                        )
                     shell_ok(
                         port,
                         f"sudo cp -a {SERVICE_DESTINATION} "
@@ -330,7 +345,12 @@ def main() -> int:
                 except Exception:
                     for destination in destinations.values():
                         try:
-                            shell_ok(port, f"cp -f {destination}.waverider-prev {destination}")
+                            shell_ok(
+                                port,
+                                f"if test -f {destination}.waverider-prev; then "
+                                f"cp -f {destination}.waverider-prev {destination}; "
+                                f"else rm -f {destination}; fi",
+                            )
                         except Exception:
                             pass
                     try:
@@ -372,6 +392,14 @@ def main() -> int:
         finally:
             try:
                 shell_ok(port, "stty echo")
+            except Exception:
+                pass
+            try:
+                shell_ok(
+                    port,
+                    "nohup sh -c 'sleep 2; sudo rm -f "
+                    f"{MAINTENANCE_INHIBIT}' </dev/null >/dev/null 2>&1 & true",
+                )
             except Exception:
                 pass
             detach_shell(port)

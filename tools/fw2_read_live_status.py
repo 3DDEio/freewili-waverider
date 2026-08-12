@@ -31,6 +31,14 @@ FIELDS = (
     "waterfall_row_rate_hz",
     "display_push_ms",
     "sdr_queue_depth",
+    "morse_message",
+    "morse_confidence",
+    "morse_history_count",
+    "morse_candidate_count",
+    "morse_candidate",
+    "morse_candidate_confidence",
+    "morse_unit_ms",
+    "morse_tone_hz",
 )
 
 
@@ -41,8 +49,8 @@ def main() -> int:
 
     with serial.Serial(args.port, 1_000_000, timeout=0.05) as port:
         open_shell(port)
-        shell_ok(port, "stty -echo")
         try:
+            shell_ok(port, "stty -echo")
             status = read_status(port)
             print(json.dumps({field: status.get(field) for field in FIELDS}, sort_keys=True))
         finally:
