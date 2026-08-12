@@ -17,6 +17,11 @@ The top LEDs communicate startup state:
 - Flashing yellow: receiver data is missing or stale. Read the on-screen status
   page for the cause and next action.
 
+Pocket Alert turns off the single front status LED above Home and automatically
+reduces the seven-LED top strip to one eighth of normal brightness. The top
+strip retains the same readiness, fault, and RSSI colors. Leaving Pocket Alert
+restores the front status LED to its prior state.
+
 Cold Linux startup can take longer than a warm relaunch. The screen remains
 interactive and the list can be browsed while WaveRider waits.
 
@@ -25,7 +30,7 @@ interactive and the list can be browsed while WaveRider waits.
 | Button | Action |
 | --- | --- |
 | Gray | Open Lists frequency management |
-| Yellow | Open Audio status and future controls |
+| Yellow | Open decoded-message history |
 | Green | Tune the next frequency |
 | Blue | Tune the previous frequency |
 | Red | Refresh receiver health and restart SDR collection |
@@ -86,22 +91,60 @@ colored scale as RSSI changes. It does not retain a peak or paint a history
 trail. The pointer and seven-LED ladder should move in the same direction as
 the numeric value.
 
+## Reading a detected Morse message
+
+When WaveRider recognizes an NFM Morse tone at approximately 450–1,150 Hz on
+the selected carrier, it first retains the decode as a candidate. A candidate is not
+presented as a callsign or message until at least three recent receptions on
+that frequency agree and pass timing/signal quality checks. Once verified, the
+left frequency rail temporarily changes to **MESSAGE DETECTED** and shows the
+decoded text. The waterfall continues updating beside the message. The overlay
+closes after eight seconds, or immediately when the receiver is tuned to
+another frequency.
+
+Press Yellow **MSGS** from Live to open a frequency summary. Each row shows a
+frequency and its verified-message count. Use Up/Left/**PREV** and
+Down/Right/**NEXT** to select a frequency, then Green, Check, or **OPEN** to
+view only that frequency's messages. Within a frequency, **PREV** and **NEXT**
+browse its observations; **FREQS** returns to the grouped summary and **LIVE**
+returns to the receiver.
+
+Red or **CLEAR** on the frequency summary opens a confirmation page. Check or
+the center **CLEAR** button permanently removes every verified message and
+hidden candidate from both the Wili cache and CM0 storage. Red, Gray, Back, or
+**CANCEL** leaves history unchanged. Clearing cannot be undone.
+
+The on-device viewer holds the latest 16 verified observations; the CM0 keeps
+up to 100 candidate and verified records in
+`/var/lib/freewili-foxhunt/messages.json` and silently restores the latest 16
+verified records after a reconnect or reboot.
+
+Morse carries letters but not capitalization, so text is displayed uppercase.
+Treat the result as an aid rather than guaranteed transcription: weak or noisy
+signals may omit or substitute characters. Recenter the carrier, improve the
+antenna signal, or reduce nearby interference if decoding is unreliable. An
+identical verified message decoded again inside 30 seconds does not open
+another popup, but its repeat count and last-seen time are still updated.
+Similar repeated receptions on the same frequency are conservatively grouped;
+actual reception counts weight the character consensus, rather than giving a
+one-off garble the same vote as repeated text. WaveRider does not use a
+dictionary or guess unknown characters. A one-time transmission may therefore
+remain an unshown candidate; this is intentional to avoid false callsigns.
+
 ## Pocket Alert status
 
-Pocket Alert is not available in this release. The connected FX0177 did not
-vibrate during a verified GPIO diagnostic, and no authoritative FreeWili motor
-driver has been published.
-
 1. From Live, press **Page** or tap the RSSI scale.
-2. WaveRider reports **UNAVAILABLE** and explains that the motor-control path
-   is awaiting a FreeWili specification.
-3. Red **Info** opens the bounded pin probe. Left/Right selects GPIO31, 36, 44,
-   or 46; Green or Red applies a 350 ms weak pull-up, a floating gap, and a
-   350 ms weak pull-down before restoring the pin. It never enables output.
-4. Press Gray, Cancel, or Page to return.
+2. Yellow toggles Pocket Alert on or off.
+3. Green lowers the threshold by 1 dB; Blue raises it by 1 dB.
+4. Red **Test** runs three 150 ms pulses with 80 ms gaps. The manual Test does
+   not wait for an RF threshold crossing.
+5. Press Gray, Cancel, or Page to return.
 
-The threshold, three-pulse pattern, 30-second cooldown, and 3 dB re-arm design
-remain in the source but cannot drive hardware in the default build.
+When enabled, WaveRider alerts once when RSSI crosses upward through the chosen
+threshold. It will not alert again until RSSI falls at least 3 dB below the
+threshold, crosses upward again, and the 30-second cooldown has expired. The
+driver matches FreeWili's shipped Meshtastic GPIO46 implementation, but users
+should confirm the manual Test on their own board revision before relying on it.
 
 ## Receiver status and Refresh
 

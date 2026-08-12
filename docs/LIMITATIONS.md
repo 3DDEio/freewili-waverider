@@ -41,6 +41,35 @@ only. It does not play NFM beacon audio through the speaker or headphone jack.
 buffering, mute, volume, squelch, and Speaker/Headphones/Both routing. Audio
 must never slow the waterfall, controls, or recovery path.
 
+## Morse decoding is tone-specific and experimental
+
+WaveRider's CM0 path can now demodulate phase changes from the selected NFM
+carrier, search approximately 450–1,150 Hz for an audio tone, and decode its
+on/off timing as Morse. This is decoded-data processing and does not provide speaker
+or headphone audio.
+
+**User impact:** A clean, centered, repeating beacon within that tone range should produce a
+`MESSAGE DETECTED` overlay after at least three agreeing receptions. One-time
+or disagreeing receptions are retained as candidates but deliberately withheld
+from the viewer to reduce false callsigns. Weak signals, multipath,
+interference, overlapping transmitters, non-FM modulation, or a substantially
+different tone pitch can still produce missing or incorrect characters. Morse
+does not encode uppercase vs. lowercase, so WaveRider displays letters in
+uppercase. A stored decode is limited to 79 printable ASCII characters. The
+popup closes after eight seconds; an identical verified decode inside 30
+seconds suppresses only the extra popup, not the evidence update. The CM0
+retains 100 candidate/verified records while the native MSGS viewer exposes the
+latest 16 verified messages, grouped by frequency. Confirmed Clear removes all
+100 retained records, including candidates that were never visible, and cannot
+be undone. This is conservative voting, not dictionary
+correction, and it cannot guarantee the transmitted text.
+
+**Current validation:** synthetic offset-tuned RTL IQ recovers `KO6FQY` and an
+unmodulated carrier is rejected. Connected over-the-air decoding of the
+147.500 MHz KO6FQY beacon has produced partial over-the-air text, but the
+complete payload still needs repeatable clean recovery before this feature is
+considered field-proven.
+
 ## RSSI is relative dBFS
 
 The displayed number is not calibrated dBm. RTL-SDR tuner variance, selected
@@ -49,33 +78,28 @@ gain, antenna, feed line, filters, and external attenuation all affect it.
 **User impact:** Compare readings only while the RF setup and gain remain
 consistent. A less-negative value means a stronger received signal.
 
-## Planned Pocket Alert is threshold-based, not signal identification
+## Pocket Alert remains threshold-based
 
-The planned Pocket Alert reacts to selected-frequency RSSI crossing a relative dBFS
-threshold. It does not demodulate or identify a transmitter, and nearby
-interference inside the selected span can also cross the threshold. Hardware
-output is disabled. The design uses three short motor pulses, a fixed
+Pocket Alert reacts to selected-frequency RSSI crossing a relative dBFS
+threshold. It does not wait for or depend on a successful Morse decode, and
+nearby interference inside the selected span can also cross the threshold. The design
+uses three short motor pulses, a fixed
 30-second cooldown, and a 3 dB fall-and-rise re-arm requirement to reduce
 battery drain and nuisance vibration. A manual Test action deliberately
 bypasses the cooldown.
 
-## Pocket Alert motor output is disabled
+## Pocket Alert hardware validation is still required
 
-The current FreeWili 2 board-support library has no authoritative haptic
-driver. Its secondary pin inventory lists a motor on Display GPIO46 and marks
-the driver `TODO`, while current FreeWili 2 logic-analyzer documentation also
-assigns GPIO46 to its analog-input bank. Connected diagnostics verified every
-requested GPIO46 high/low transition at the MCU pad, but the motor never moved.
-That result rules out WaveRider's pulse sequencer without proving that GPIO46
-is a motor control on this board revision.
+The installed Meshtastic binary identifies FreeWili's public `freewili-port`
+source. That branch maps the motor to Display GPIO46 and drives it active-high
+at 12 mA with three 150 ms pulses separated by 80 ms. The installed Doom build
+independently contains a dedicated haptic PWM driver. WaveRider now follows the
+Meshtastic GPIO and timing exactly; see `docs/HAPTIC_EVIDENCE.md`.
 
-**User impact:** WaveRider never enables output drive on an unverified haptic
-pin. Its explicit Info diagnostic can briefly apply only weak internal pulls
-to GPIO31, 36, 44, or 46, restoring the exact prior mux/pad state after each
-350 ms touch. The complete connected scan produced no response (GPIO31 was
-repeated; GPIO36/44/46 were tested once). Pocket Alert reports that the hardware path is unavailable until FreeWili confirms the
-processor/pin, active level, required waveform, and any power gate. Visual RSSI,
-waterfall, and LED feedback continue to operate normally.
+**User impact:** source inspection clears the prior pin/waveform uncertainty,
+but it does not prove that every board revision populates the same motor or that
+the connected unit will move. Run the manual Test before relying on Pocket
+Alert. RSSI, waterfall, and LED feedback remain the authoritative fallbacks.
 
 ## Waterfall resolution is optimized for field hunting
 
@@ -101,6 +125,25 @@ last-row age, and command synchronization. A stale receiver replaces the
 waterfall with a plain-language attention page and flashes all seven top LEDs
 yellow.
 
+## FW2 v07 hides stock boot sound and light-show defaults
+
+The stock v07 firmware contains playback-volume, system-sound, and default
+light-show preferences, but Display Setup is not present in the on-device main
+menu. The FTDI endpoint is the FPGA high-speed interface, not a Display serial
+console.
+
+**User impact:** Turning the Light Show off inside its ordinary app is
+temporary, and the startup voice cannot be disabled from the visible Settings
+screens.
+
+**Current status:** There is no verified FW2 v07 workaround yet. A backed-up
+debug-probe experiment wrote and remounted a `settings.txt` containing
+`sndvol=0`, `sndsys=0`, and `lshowdef=0`, but a full power cycle still produced
+the LED show and spoken boot clip. Runtime inspection then showed the effective
+`sndsys` value was still the compiled factory default (`1`). The helper now
+refuses the v07 write path. The legacy serial-menu method is for
+first-generation FreeWili hardware only.
+
 ## Receiver USB and maintenance serial are mutually exclusive
 
 The tested CM0 exposes one USB controller. Receiver mode routes it to the
@@ -110,6 +153,23 @@ gadget.
 **User impact:** The CM0 serial port disappears in receiver mode. A routed host
 shell also suppresses live Display acknowledgements on tested v07 firmware, so
 maintenance sessions must detach before judging the waterfall or buttons.
+
+## Main bridge recovery is bounded
+
+WaveRider distinguishes a missing app signal during ordinary Linux startup
+from a broken Main-to-Display transport. After eight consecutive transport
+failures, it reopens the local OneWili connection after three seconds. If the
+transport is still unavailable after fifteen seconds, it makes one Main CPU
+software-reset request for that recovery episode. The CM0, Linux, SDR stream,
+saved frequencies, and device settings are not reset.
+
+**User impact:** Local parser and ordinary post-disconnect failures can recover
+without a full power cycle. A deeply wedged Main route cannot carry the reset
+request that would repair it. WaveRider replaces the indefinite waiting screen
+with **Main Bridge Locked** and directs the user to hold Home, then choose
+Hardware → Settings → Software Reset. A full power cycle is the fallback.
+Recovery is only active while the WaveRider native app is on screen; it will
+not reset Main while the user is intentionally working in Linux Terminal.
 
 ## Tested hardware scope is narrow
 
@@ -140,3 +200,12 @@ through `foxhuntctl lists` while the maintenance console is available.
 
 WaveRider controls only an RTL-SDR receive path. It contains no transmit or
 radio-keying capability.
+## Front status LED in Pocket Alert
+
+WaveRider dims its seven top RGB LEDs in Pocket Alert mode, but it does not
+switch off the separate front status LED. Current FreeWili 2 firmware exposes
+that indicator only inside a complete Main power-mask operation. Rebuilding
+that mask from a live status snapshot is unsafe because transient or
+device-managed USB-hub and CM0 bits may be absent; sending the incomplete mask
+can interrupt the RTL-SDR or CM0 route. A dedicated front-LED control from the
+device firmware is required before WaveRider can safely suppress it.

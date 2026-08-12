@@ -45,6 +45,41 @@ keeps only the two newest rows. This remains offline-installable and requires no
 extension or NumPy on the 416 MiB CM0. The older distro-provided `rtl_power`
 worker remains the automatic fallback if the shared library is unavailable.
 
+The live IQ worker also feeds an experimental narrow-FM Morse branch. It uses
+phase-difference demodulation at approximately 16 kHz, removes WaveRider's
+known RTL tuner offset, and searches a bounded CW audio range in 20 ms Goertzel
+windows while reporting the detected tone lock.
+The timing decoder retains tone and silence durations for a complete message,
+then fits the dot unit against all 1/3 mark and 1/3/7 gap ratios before
+classifying any character. This prevents a fast beacon's first dash from being
+classified using the slower startup guess. Confidence combines timing
+residuals, known-pattern coverage, and tone evidence; disagreeing callsign-
+shaped bookends invalidate the candidate.
+Before classification, sub-dot tone interruptions and noise spikes are merged
+back into their surrounding run. A one-second end guard prevents long word
+spacing from prematurely emitting a fragment as a complete message.
+Tone detection uses separate acquisition/release thresholds: a new mark needs
+strong spectral evidence, while a locked mark tolerates modest fading. Dot-unit
+adaptation is bounded between messages so noisy candidates cannot drag the
+decoder from a measured 20 WPM signal toward an implausible slow timing model.
+Only a bounded decoded text event leaves the CM0; raw PCM is not sent through
+the app-signal mailbox. Text is transported in sequenced six-byte chunks. A
+zero-span marker identifies a live detection and a one-hertz span identifies a
+silent history replay; neither can collide with a valid WaveRider tuning frame.
+The first 11 payload bytes carry exact frequency kHz, repeat count, confidence,
+and `HH:MM`; up to 79 printable text bytes follow without adding signal slots.
+
+`MessageStore` atomically persists up to 100 observations in `messages.json`.
+Similar receptions on the same frequency are conservatively coalesced. Per-
+variant occurrence counts feed an aligned consensus, and a record remains an
+internal candidate until at least three receptions have sufficient decoder
+quality and agreement. On display connect, the CM0 replays the latest 16
+verified records without triggering old popups. The native app caches that
+bounded page, groups it by exact frequency, and owns MSGS navigation locally,
+so reviewing history does not interrupt SDR capture. A confirmation-gated
+native command clears both the cache and the complete atomic CM0 store,
+including candidate records that are deliberately absent from the viewer.
+
 On FX0177 with the RTL2838/R820T test receiver and a 200 kHz span, the native
 worker produced 20 rows in 2.908 seconds (6.88 rows/second including device
 open, tuning, and close). Capture is therefore no longer the dominant latency.
@@ -71,17 +106,16 @@ continuous RSSI scale, waterfall centerline, button footer, and top LED meter.
 Holding Home for five seconds returns to the stock recovery loader. Main and
 Display firmware remain unchanged.
 
-Pocket Alert's planned sequencer remains on the Display CPU, but hardware
-output is compile-time disabled because GPIO46 is not an authoritative motor
-interface and the connected motor did not respond. A deliberate diagnostic
-screen can test only GPIO31/36/44/46 with input-mode internal pulls; it snapshots
-and restores the complete IO mux and pad state around each 350 ms touch. CM0 atomically persists the
-planned enabled flag and integer dBFS threshold in `pocket-alert.json`. To stay
+Pocket Alert's sequencer runs on the Display CPU. Its GPIO46 active-high output,
+12 mA drive, and 150 ms pulse / 80 ms gap timing match the FreeWili Meshtastic
+port recovered from the installed app; the evidence and checksums are recorded
+in `docs/HAPTIC_EVIDENCE.md`. CM0 atomically persists the enabled flag and
+integer dBFS threshold in `pocket-alert.json`. To stay
 within Main v07's 32 named-signal
 limit, Live mode packs list count in the low byte of `wr_count`, enabled in bit
 8, and the threshold offset from -90 dBFS in bits 9..15. Opcodes 14 and 15
-persist changes. The dormant sequence is nonblocking (three 450 ms pulses,
-separated by 140 ms), so it never sleeps or delays RSSI/waterfall polling.
+persist changes. The sequence is nonblocking (three 150 ms pulses separated by
+80 ms), so it never sleeps or delays RSSI/waterfall polling.
 Normal triggers use both a 30-second cooldown and 3 dB hysteretic re-arm.
 
 The older stock-panel transport remains useful for maintenance diagnostics. It
@@ -142,7 +176,7 @@ alone never changes the boot profile. Replacement is performed before checking
 whether the requested value appears elsewhere, because a board-filtered example
 must not mask the still-active USB-role line.
 
-## Planned audio path
+## Planned audible audio path
 
 The FreeWili 2 playback hardware is suitable: WiliBSP proves the NAU88C10 codec,
 fixed approximately 16 kHz I2S playback, onboard speaker, 3.5 mm headphone
@@ -150,11 +184,12 @@ output, and independent speaker/headphone routing. The speaker is rated at
 0.5 W maximum; WaveRider must retain the BSP's speaker-volume safety cap and
 enter the codec's speaker low-power state whenever muted.
 
-The current application boundary does not yet carry audio. NFM demodulation
-must branch from CM0's tuned IQ stream through de-emphasis and squelch, while
-the playback codec and I2S DMA are owned by the RP2350 Display CPU. The current
-Main app-signal mailbox is intentionally sized for controls and twelve
-waterfall bins at a few rows per second; it cannot safely transport 16 kHz PCM.
+The current application boundary does not yet carry audible PCM. NFM tone
+analysis for Morse already branches locally from CM0's tuned IQ stream, but
+general audio playback still needs de-emphasis and squelch while the playback
+codec and I2S DMA are owned by the RP2350 Display CPU. The current Main
+app-signal mailbox is intentionally sized for controls, twelve waterfall bins,
+and bounded text events; it cannot safely transport 16 kHz PCM.
 The existing USB audio-stream helper carries the device microphone toward a
 host and is not a CM0-to-speaker playback route.
 

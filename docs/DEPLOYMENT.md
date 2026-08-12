@@ -162,8 +162,8 @@ the serial console available again.
 
 ## Legacy Main-SD UI assets
 
-The current native Apps-menu build draws both the three-second surfing-whale
-splash and the continuous RSSI scale itself. It does not depend on an image
+The current native Apps-menu build animates the three-second surfing-orca and
+sound-wave splash and draws the continuous RSSI scale itself. It does not depend on an image
 file, Main-SD mount state, or FW2's picture-control lookup rules. Tap the
 `WaveRider` title to replay the splash for verification.
 

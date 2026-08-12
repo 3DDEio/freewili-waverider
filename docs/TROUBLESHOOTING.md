@@ -19,6 +19,28 @@ an additional board-filtered host-mode example later in `config.txt`.
 example already contains the requested host value. Current releases handle
 this ordering correctly.
 
+## Stuck on `Waiting for SDR Data` with flashing yellow LEDs
+
+First allow the normal CM0/tuner startup window. WaveRider now waits 20 seconds
+before attempting any recovery. On FW2 v07, Main can occasionally retain its
+routed Linux `TYPE_SHELL` session during a fresh launch. In that state the SDR
+may already be sampling while Main blocks the app-signal updates needed by the
+Display, so the waiting screen alone does not prove that the dongle is missing.
+
+Current builds self-heal this specific boot race during a bounded 90-second
+window. They hang up only the `login -f pi` process directly owned by
+`fwcm0 bridge`; the bridge then sends its normal `SHELL_EXIT` notice to Main.
+Linux, the bridge, the SDR capture, saved lists, and tuning state are not
+restarted. The recovery is disabled after WaveRider has connected once and is
+inhibited during an explicit maintenance deployment, so a terminal opened
+later for diagnosis is not forcibly closed.
+
+If the screen is still waiting after 90 seconds, exit any Linux Terminal that
+is visibly open, return Home, and relaunch WaveRider. Do not restart
+`fwcm0-bridge.service` from a shell that is itself routed through that bridge.
+Use `sudo foxhuntctl doctor` only after the terminal route has been cleanly
+closed.
+
 ## Stale or duplicated foxhunt panels
 
 The FreeWili display retains dynamic panels until explicitly reset. Current
