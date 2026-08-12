@@ -47,6 +47,9 @@ hardware observations in that audit.
   pass exposed macOS-only tar flags and one interrupted Picotool transfer; the
   builders are now portable, downloads resume/retry under publisher hashes,
   and checkout/setup-python are pinned to their current Node 24 releases.
+- [x] Enable GitHub default CodeQL analysis for Actions, C/C++, and Python.
+  The initial three-language scan passed, and the live repository reports zero
+  open CodeQL, secret-scanning, and Dependabot alerts as of 2026-08-12.
 - [x] Confirm the repaired Python 3.11/3.13 and source-to-UF2 GitHub jobs pass
   on the exact pushed release-candidate commit. Push and pull-request runs
   `31645372707` and `31645377362` independently passed all three gates on
