@@ -26,6 +26,11 @@ All notable public changes to WaveRider are recorded here. The format follows
   former `/apps/waverider` entry.
 - Pytest collection is explicitly confined to WaveRider's tests instead of the
   pinned vendor SDK research trees.
+- Boot-recovery verification now always detaches its routed shell, including
+  when the initial terminal command fails, and compares installed hashes
+  exactly rather than by substring.
+- Pocket Alert and the opt-in FX0177 v07 quiet/dark startup documentation now
+  match the physically verified hardware behavior.
 
 ### Field validation
 

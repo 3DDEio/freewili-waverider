@@ -31,14 +31,14 @@ def main() -> int:
     }
     with serial.Serial(args.port, 1_000_000, timeout=0.05) as port:
         open_shell(port)
-        shell_ok(port, "stty -echo")
         try:
+            shell_ok(port, "stty -echo")
             for name in MODULES:
                 output = shell_readonly(
                     port,
                     f"sha256sum {INSTALL_ROOT}/{name} | cut -d' ' -f1",
                 )
-                if expected[name] not in output:
+                if output.strip() != expected[name]:
                     raise RuntimeError(
                         f"installed {name} does not match working tree: {output!r}"
                     )
