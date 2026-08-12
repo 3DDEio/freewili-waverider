@@ -416,8 +416,22 @@ Brand migration begins after the connected device demonstrates:
   Inspection found the CircuitPython beacon constructing and deinitializing
   `PWMOut` for every Morse mark; that per-symbol lifecycle delay corrupts the
   intended 92.3 ms 1:3:7 ratios. A separate beacon-firmware correction now
-  allocates PWM once and keys it by duty cycle. Install that revision and rerun
-  this gate before changing WaveRider's quality thresholds.
+  allocates PWM once and keys it by duty cycle. The corrected beacon was then
+  installed with byte-for-byte readback verification and one interference-free
+  over-air transmission was observed. WaveRider again locked exactly to 800 Hz
+  with perfect signal confidence, but safely withheld `3??T??T??H`: 55 marks
+  and 54 gaps survived, timing confidence was 0.53, and the attempt incorrectly
+  fitted a 129.2 ms unit despite the persisted 92.3 ms / 13 WPM model. Raw
+  timing bands were 40/160/620 ms marks and 60/140/500 ms gaps. Offline
+  reproduction showed the circular failure: the slow preliminary unit treated
+  real 60 ms intra-symbol gaps as receiver dropouts and merged the intended
+  108-mark payload into long invalid runs. Cleanup is now anchored to the
+  established unit and erases only gaps below 60 percent of it; observed
+  detector separator clusters use conservative 1.5/4.0 character/word
+  boundaries while confidence remains scored against ideal 1/3/7 timing. The
+  exact field-duration regression plus all 62 focused decoder/runtime/history/
+  settings/Pocket Alert tests pass. Deploy this revision and resume the ten-run
+  efficacy gate without concurrent Main USB mailbox probes.
 
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
