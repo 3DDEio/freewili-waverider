@@ -327,7 +327,15 @@ class MorseTimingDecoder:
         # eventually suppress every real beacon dot. Whole-message fitting
         # handles abrupt valid speed changes; retain timing only from a
         # candidate that has actually passed every quality check.
-        self.unit_seconds = self.unit_seconds * 0.25 + unit * 0.75
+        # A syntactically valid candidate can still be a wrong-speed decode.
+        # The connected 13 WPM beacon produced seven different, mostly-known
+        # strings with perfect tone evidence but only 0.62 timing confidence;
+        # accepting the first one as a speed teacher walked the persistent
+        # model to about 21 WPM.  Keep such candidates for repeat consensus,
+        # but retrain speed only from a decisively timed reception.  Clean
+        # abrupt 20 WPM acquisition remains above this gate in the IQ suite.
+        if timing_confidence >= 0.80:
+            self.unit_seconds = self.unit_seconds * 0.25 + unit * 0.75
         return DecodedMessage(
             text=text,
             confidence=confidence,
@@ -380,7 +388,7 @@ class NfmMorseDecoder:
     AUDIO_RATE_HZ = 16_000
     WINDOW_SECONDS = 0.020
     ATTACK_WINDOWS = 2
-    RELEASE_WINDOWS = 2
+    RELEASE_WINDOWS = 3
 
     def __init__(self, tone_hz: float = 800.0) -> None:
         self.tone_hz = tone_hz
@@ -400,6 +408,8 @@ class NfmMorseDecoder:
         self._audio: list[float] = []
         self._candidate = False
         self._candidate_windows = 0
+        self._candidate_duration_seconds = 0.0
+        self._candidate_evidence: list[float] = []
         self._stable_tone = False
         self.detected_tone_hz = self.tone_hz
 
@@ -496,18 +506,57 @@ class NfmMorseDecoder:
     def _feed_tone_window(
         self, raw_tone: bool, evidence: float = 1.0
     ) -> list[DecodedMessage]:
+        if raw_tone == self._stable_tone:
+            # A provisional opposite state that vanishes before its debounce
+            # threshold was a detector click/dropout. Assign those buffered
+            # windows back to the stable state, together with this window,
+            # instead of exposing a false 20/40 ms Morse run.
+            duration = self.WINDOW_SECONDS
+            if self._candidate != self._stable_tone:
+                duration += self._candidate_duration_seconds
+            self._candidate = self._stable_tone
+            self._candidate_windows = 0
+            self._candidate_duration_seconds = 0.0
+            self._candidate_evidence.clear()
+            return self.timing.feed(
+                self._stable_tone,
+                duration,
+                evidence=evidence if self._stable_tone else 1.0,
+            )
+
         if raw_tone == self._candidate:
             self._candidate_windows += 1
+            self._candidate_duration_seconds += self.WINDOW_SECONDS
+            self._candidate_evidence.append(evidence)
         else:
             self._candidate = raw_tone
             self._candidate_windows = 1
+            self._candidate_duration_seconds = self.WINDOW_SECONDS
+            self._candidate_evidence = [evidence]
         required = self.ATTACK_WINDOWS if raw_tone else self.RELEASE_WINDOWS
-        if raw_tone != self._stable_tone and self._candidate_windows >= required:
-            self._stable_tone = raw_tone
+        if self._candidate_windows < required:
+            return []
+
+        # The candidate is now real. Feed its complete buffered duration to
+        # the new state; the old implementation repeatedly fed those windows
+        # to the prior state while waiting, systematically distorting both
+        # marks and gaps. Three-window release bridges up to 40 ms of fading
+        # inside a dash while a real 13 WPM separator (about 92 ms) still
+        # crosses cleanly with its full duration preserved.
+        duration = self._candidate_duration_seconds
+        candidate_evidence = (
+            median(self._candidate_evidence)
+            if self._candidate_evidence
+            else evidence
+        )
+        self._stable_tone = raw_tone
+        self._candidate_windows = 0
+        self._candidate_duration_seconds = 0.0
+        self._candidate_evidence.clear()
         return self.timing.feed(
             self._stable_tone,
-            self.WINDOW_SECONDS,
-            evidence=evidence if self._stable_tone else 1.0,
+            duration,
+            evidence=candidate_evidence if self._stable_tone else 1.0,
         )
 
     def feed_iq(

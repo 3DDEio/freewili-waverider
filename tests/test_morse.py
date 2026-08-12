@@ -179,6 +179,65 @@ def test_timing_decoder_preserves_field_shortened_intra_symbol_gaps() -> None:
     assert 75.0 <= decoder.last_attempt_unit_ms <= 100.0
 
 
+def test_moderate_timing_candidate_does_not_retrain_persistent_speed() -> None:
+    decoder = MorseTimingDecoder(initial_wpm=13)
+    initial_unit = decoder.unit_seconds
+    text_to_morse = {
+        character: pattern for pattern, character in MORSE_TO_TEXT.items()
+    }
+    words = "KO6FQY JOIN NORCALCYBER.IO! KO6FQY".split()
+    for word_index, word in enumerate(words):
+        for character_index, character in enumerate(word):
+            for mark in text_to_morse[character]:
+                decoder.feed(True, 0.040 if mark == "." else 0.160)
+                decoder.feed(False, 0.080)
+            if character_index != len(word) - 1:
+                decoder.feed(False, 0.080)
+        if word_index != len(words) - 1:
+            decoder.feed(False, 0.240)
+
+    messages = decoder.feed(False, 1.1)
+
+    assert [message.text for message in messages] == [
+        "KO6FQY JOIN NORCALCYBER.IO! KO6FQY"
+    ]
+    assert messages[0].timing_confidence < 0.80
+    assert decoder.unit_seconds == initial_unit
+
+
+def test_nfm_debounce_bridges_two_window_fades_inside_dashes() -> None:
+    decoder = NfmMorseDecoder(tone_hz=800.0)
+    text_to_morse = {
+        character: pattern for pattern, character in MORSE_TO_TEXT.items()
+    }
+    messages = []
+
+    def windows(tone: bool, count: int) -> None:
+        for _ in range(count):
+            messages.extend(decoder._feed_tone_window(tone, 1.0))
+
+    windows(False, 5)
+    for character_index, character in enumerate("KO6FQY"):
+        for mark in text_to_morse[character]:
+            if mark == ".":
+                windows(True, 5)
+            else:
+                # Two false windows reproduce the connected detector's 40 ms
+                # fade inside otherwise continuous 13 WPM dashes.
+                windows(True, 6)
+                windows(False, 2)
+                windows(True, 6)
+            windows(False, 5)
+        if character_index != 5:
+            windows(False, 9)
+    windows(False, 55)
+
+    assert [message.text for message in messages] == ["KO6FQY"]
+    assert decoder.timing.last_attempt_mark_count == sum(
+        len(text_to_morse[character]) for character in "KO6FQY"
+    )
+
+
 def test_rejected_noise_cannot_retrain_decoder_to_impossible_slow_speed() -> None:
     decoder = MorseTimingDecoder(initial_wpm=13)
     initial_unit = decoder.unit_seconds
