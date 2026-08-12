@@ -2,11 +2,29 @@ from __future__ import annotations
 
 import math
 import unittest
+from types import SimpleNamespace
 
 from freewili_foxhunt.rtl_iq import FFT_SIZE, RtlIqStream, analyze_iq
 
 
 class RtlIqTests(unittest.TestCase):
+    def test_disabling_cw_resets_decoder_and_discards_pending_messages(self) -> None:
+        stream = object.__new__(RtlIqStream)
+        stream.cw_enabled = True
+        stream.messages = __import__("queue").Queue(maxsize=4)
+        stream.messages.put_nowait(SimpleNamespace(text="PENDING"))
+        resets = []
+        stream.morse_decoder = SimpleNamespace(reset=lambda: resets.append(True))
+
+        stream.set_cw_enabled(False)
+
+        self.assertFalse(stream.cw_enabled)
+        self.assertEqual(resets, [True])
+        self.assertTrue(stream.messages.empty())
+
+        stream.set_cw_enabled(False)
+        self.assertEqual(resets, [True])
+
     def test_sample_rates_cover_supported_spans(self) -> None:
         self.assertEqual(RtlIqStream.sample_rate_for(200_000), 240_000)
         self.assertEqual(RtlIqStream.sample_rate_for(500_000), 1_024_000)

@@ -33,6 +33,8 @@ from .spectrum import (
 )
 from .status import StatusWriter
 from .store import (
+    DecoderSettings,
+    DecoderSettingsStore,
     FrequencyLibraryStore,
     ListStore,
     MessageRecord,
@@ -67,6 +69,8 @@ class FoxhuntApp:
         alert_settings: PocketAlertSettings | None = None,
         message_store: MessageStore | None = None,
         message_records: list[MessageRecord] | None = None,
+        decoder_store: DecoderSettingsStore | None = None,
+        decoder_settings: DecoderSettings | None = None,
     ) -> None:
         self.frequency_list = frequency_list
         self.frequency_lists = frequency_lists or [frequency_list]
@@ -77,6 +81,8 @@ class FoxhuntApp:
         self.alert_store = alert_store
         self.message_store = message_store
         self.message_records = message_records if message_records is not None else []
+        self.decoder_store = decoder_store
+        self.decoder_settings = decoder_settings or DecoderSettings()
         self.alert_settings = alert_settings or PocketAlertSettings()
         self.alert_settings.validate()
         if saved_frequencies is None:
@@ -108,6 +114,9 @@ class FoxhuntApp:
                 LOG.warning("native librtlsdr unavailable, using rtl_power: %s", error)
                 self.sdr = RtlPowerStream()
         self.once = once
+        set_cw_enabled = getattr(self.sdr, "set_cw_enabled", None)
+        if callable(set_cw_enabled):
+            set_cw_enabled(self.decoder_settings.cw_enabled)
         self.stop_event = threading.Event()
         self.pending_delta = 0
         self.editor_mode = False
@@ -263,6 +272,9 @@ class FoxhuntApp:
                     self.alert_settings.enabled,
                     self.alert_settings.threshold_dbfs,
                 )
+            set_cw_decoder = getattr(self.display, "set_cw_decoder", None)
+            if callable(set_cw_decoder):
+                set_cw_decoder(self.decoder_settings.cw_enabled)
             try:
                 self.display.show_splash(3.0)
             except DisplayUnavailable as error:
@@ -316,6 +328,9 @@ class FoxhuntApp:
                     self.alert_settings.enabled,
                     self.alert_settings.threshold_dbfs,
                 )
+            set_cw_decoder = getattr(candidate, "set_cw_decoder", None)
+            if callable(set_cw_decoder):
+                set_cw_decoder(self.decoder_settings.cw_enabled)
             candidate.build(self.frequency_list, self.selected)
             self._replay_message_history(candidate)
         except DisplayUnavailable as error:
@@ -581,6 +596,21 @@ class FoxhuntApp:
             self._last_morse_message_at = 0.0
             LOG.info("cleared persisted CW message and candidate history")
             return
+        if action.startswith("decoder_enabled:"):
+            self.decoder_settings.cw_enabled = action.endswith(":1")
+            if self.decoder_store is not None:
+                self.decoder_store.save(self.decoder_settings)
+            set_cw_enabled = getattr(self.sdr, "set_cw_enabled", None)
+            if callable(set_cw_enabled):
+                set_cw_enabled(self.decoder_settings.cw_enabled)
+            set_cw_decoder = getattr(self.display, "set_cw_decoder", None)
+            if callable(set_cw_decoder):
+                set_cw_decoder(self.decoder_settings.cw_enabled)
+            LOG.info(
+                "CW decoder %s",
+                "enabled" if self.decoder_settings.cw_enabled else "disabled",
+            )
+            return
         if action.startswith("alert_enabled:"):
             self.alert_settings.enabled = action.endswith(":1")
             self._save_alert_settings()
@@ -835,6 +865,9 @@ class FoxhuntApp:
                     if elapsed > 0:
                         row_rate_hz = (len(self._waterfall_timestamps) - 1) / elapsed
                 snapshot = self.display.snapshot
+                morse_timing = getattr(
+                    getattr(self.sdr, "morse_decoder", None), "timing", None
+                )
                 self.status.write(
                     state="live",
                     sdr_connected=True,
@@ -867,6 +900,37 @@ class FoxhuntApp:
                     ),
                     morse_candidate=self.last_morse_candidate,
                     morse_candidate_confidence=self.last_morse_candidate_confidence,
+                    morse_attempt=getattr(morse_timing, "last_attempt_text", None),
+                    morse_attempt_confidence=getattr(
+                        morse_timing, "last_attempt_confidence", None
+                    ),
+                    morse_attempt_timing_confidence=getattr(
+                        morse_timing, "last_attempt_timing_confidence", None
+                    ),
+                    morse_attempt_signal_confidence=getattr(
+                        morse_timing, "last_attempt_signal_confidence", None
+                    ),
+                    morse_attempt_known_confidence=getattr(
+                        morse_timing, "last_attempt_known_confidence", None
+                    ),
+                    morse_attempt_rejection=getattr(
+                        morse_timing, "last_attempt_rejection", None
+                    ),
+                    morse_attempt_mark_count=getattr(
+                        morse_timing, "last_attempt_mark_count", 0
+                    ),
+                    morse_attempt_gap_count=getattr(
+                        morse_timing, "last_attempt_gap_count", 0
+                    ),
+                    morse_attempt_mark_range_ms=getattr(
+                        morse_timing, "last_attempt_mark_range_ms", None
+                    ),
+                    morse_attempt_gap_range_ms=getattr(
+                        morse_timing, "last_attempt_gap_range_ms", None
+                    ),
+                    morse_attempt_unit_ms=getattr(
+                        morse_timing, "last_attempt_unit_ms", None
+                    ),
                     morse_unit_ms=round(
                         float(
                             getattr(
@@ -892,6 +956,8 @@ class FoxhuntApp:
                         ),
                         1,
                     ),
+                    cw_decoder_enabled=self.decoder_settings.cw_enabled,
+                    audio_monitor_available=False,
                 )
                 if self.once:
                     return 0
@@ -942,6 +1008,8 @@ def main() -> int:
     alert_settings = alert_store.load_or_default()
     message_store = MessageStore(Path(args.state_dir) / "messages.json")
     message_records = message_store.load_or_empty()
+    decoder_store = DecoderSettingsStore(Path(args.state_dir) / "decoder-settings.json")
+    decoder_settings = decoder_store.load_or_default()
 
     app = FoxhuntApp(
         selected_list,
@@ -956,6 +1024,8 @@ def main() -> int:
         alert_settings=alert_settings,
         message_store=message_store,
         message_records=message_records,
+        decoder_store=decoder_store,
+        decoder_settings=decoder_settings,
     )
     signal.signal(signal.SIGTERM, lambda *_: app.stop())
     signal.signal(signal.SIGINT, lambda *_: app.stop())

@@ -38,6 +38,22 @@ interactive and the list can be browsed while WaveRider waits.
 The D-pad browses and immediately tunes the list. Check also applies the
 highlighted entry.
 
+## Settings
+
+Press **Page** or tap the RSSI scale to open Settings. Up/Down selects a row;
+Check, Green **Open**, or a tap opens its detail screen. Page, Gray, or Back
+returns to Settings from a detail screen, and Red **Live** returns directly to
+the receiver. Opening Settings never pauses SDR collection.
+
+- **Audio Monitor** shows the planned live-monitor and volume controls. They
+  remain locked and the receiver remains muted until the safe high-rate PCM
+  path to the speaker and headphone jack is implemented.
+- **Pocket Alert** controls vibration enablement, threshold, and the manual
+  three-pulse Test.
+- **CW Decoder** enables or disables new Morse processing. Disabling it does
+  not erase verified messages or hidden candidates; those remain in MSGS until
+  the user explicitly clears message history.
+
 ## Managing saved and Live frequencies
 
 Press Gray **Lists** to replace the waterfall with Frequency Library. The
@@ -133,12 +149,13 @@ remain an unshown candidate; this is intentional to avoid false callsigns.
 
 ## Pocket Alert status
 
-1. From Live, press **Page** or tap the RSSI scale.
+1. From Live, press **Page** or tap the RSSI scale, select **Pocket Alert**, and
+   press Check or **Open**.
 2. Yellow toggles Pocket Alert on or off.
 3. Green lowers the threshold by 1 dB; Blue raises it by 1 dB.
 4. Red **Test** runs three 150 ms pulses with 80 ms gaps. The manual Test does
    not wait for an RF threshold crossing.
-5. Press Gray, Cancel, or Page to return.
+5. Press Gray, Cancel, or Page to return to Settings; Red returns to Live.
 
 When enabled, WaveRider alerts once when RSSI crosses upward through the chosen
 threshold. It will not alert again until RSSI falls at least 3 dB below the

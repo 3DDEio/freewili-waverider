@@ -512,7 +512,7 @@ def test_native_display_publishes_frequency_list_before_list_commit():
     commands = transport.batches[-1]
     # Low byte is the live count; high bits carry disabled/-50 dBFS Pocket
     # Alert settings without consuming a 33rd Main mailbox signal.
-    assert f"s\\i\\s wr_count {(40 << 9) | 2}.000" in commands
+    assert f"s\\i\\s wr_count {(1 << 16) | (40 << 9) | 2}.000" in commands
     assert "s\\i\\s wr_sel 1.000" in commands
     assert "s\\i\\s wr_f0 147420000.000" in commands
     assert "s\\i\\s wr_f1 147495000.000" in commands
@@ -530,7 +530,7 @@ def test_native_display_packs_and_decodes_pocket_alert_settings():
 
     display.build(frequency_list, 0)
 
-    assert f"s\\i\\s wr_count {(43 << 9) | (1 << 8) | 1}.000" in transport.batches[-1]
+    assert f"s\\i\\s wr_count {(1 << 16) | (43 << 9) | (1 << 8) | 1}.000" in transport.batches[-1]
 
     transport.command_value = (1 << 8) | (14 << 4) | 1
     display._next_command_poll = 0
@@ -539,6 +539,26 @@ def test_native_display_packs_and_decodes_pocket_alert_settings():
     transport.command_value = (2 << 8) | (15 << 4)
     display._next_command_poll = 0
     assert display.poll_action() == "alert_threshold:-47"
+
+
+def test_native_display_packs_and_decodes_cw_decoder_setting():
+    transport = FakeSignalTransport()
+    display = NativeSignalDisplay(lambda: transport)
+    display.connect()
+    display.set_cw_decoder(False)
+    frequency_list = SimpleNamespace(
+        frequencies=[SimpleNamespace(frequency_hz=147_500_000, span_hz=100_000)]
+    )
+
+    display.build(frequency_list, 0)
+
+    assert "s\\i\\s wr_count 20481.000" in transport.batches[-1]
+    transport.command_value = (1 << 8) | 2
+    display._next_command_poll = 0
+    assert display.poll_action() == "decoder_enabled:0"
+    transport.command_value = (2 << 8) | 3
+    display._next_command_poll = 0
+    assert display.poll_action() == "decoder_enabled:1"
 
 
 def test_native_display_publishes_paged_library_with_live_membership():
