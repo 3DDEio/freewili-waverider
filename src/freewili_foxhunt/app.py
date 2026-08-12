@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .bridge_recovery import release_initial_shell_route
 from .display import DisplayUnavailable, NullDisplay, create_display
 from .models import (
     ALLOWED_SPANS_HZ,
@@ -21,6 +22,7 @@ from .models import (
     FrequencyEntry,
     FrequencyList,
 )
+from .morse import DecodedMessage
 from .rtl_power import RtlPowerStream
 from .rtl_iq import RtlIqStream
 from .spectrum import (
@@ -33,6 +35,8 @@ from .status import StatusWriter
 from .store import (
     FrequencyLibraryStore,
     ListStore,
+    MessageRecord,
+    MessageStore,
     PocketAlertSettings,
     PocketAlertStore,
 )
@@ -43,6 +47,9 @@ LOG = logging.getLogger("freewili_foxhunt")
 
 class FoxhuntApp:
     DISPLAY_RETRY_SECONDS = 5.0
+    INITIAL_SHELL_RECOVERY_GRACE_SECONDS = 20.0
+    INITIAL_SHELL_RECOVERY_SECONDS = 90.0
+    MORSE_DUPLICATE_SECONDS = 30.0
 
     def __init__(
         self,
@@ -58,6 +65,8 @@ class FoxhuntApp:
         saved_frequencies: list[FrequencyEntry] | None = None,
         alert_store: PocketAlertStore | None = None,
         alert_settings: PocketAlertSettings | None = None,
+        message_store: MessageStore | None = None,
+        message_records: list[MessageRecord] | None = None,
     ) -> None:
         self.frequency_list = frequency_list
         self.frequency_lists = frequency_lists or [frequency_list]
@@ -66,6 +75,8 @@ class FoxhuntApp:
         self.store = store
         self.library_store = library_store
         self.alert_store = alert_store
+        self.message_store = message_store
+        self.message_records = message_records if message_records is not None else []
         self.alert_settings = alert_settings or PocketAlertSettings()
         self.alert_settings.validate()
         if saved_frequencies is None:
@@ -110,8 +121,16 @@ class FoxhuntApp:
         self.last_rssi_dbfs: float | None = None
         self.last_peak_offset_hz: float | None = None
         self._display_retry_at = 0.0
+        self._started_at = time.monotonic()
+        self._display_ever_connected = False
+        self._display_shell_recovery_done = False
         self._waterfall_timestamps: deque[float] = deque(maxlen=64)
         self._display_push_ms = 0.0
+        self.last_morse_message: str | None = None
+        self.last_morse_confidence: float | None = None
+        self.last_morse_candidate: str | None = None
+        self.last_morse_candidate_confidence: float | None = None
+        self._last_morse_message_at = 0.0
         self.waterfall_scale = WaterfallScale(
             frequency_list.floor_dbfs,
             frequency_list.ceiling_dbfs,
@@ -144,6 +163,97 @@ class FoxhuntApp:
     def stop(self) -> None:
         self.stop_event.set()
 
+    def _drain_decoded_messages(self) -> None:
+        messages = getattr(self.sdr, "messages", None)
+        if messages is None:
+            return
+        while True:
+            try:
+                item: DecodedMessage = messages.get_nowait()
+            except queue.Empty:
+                return
+            now = time.monotonic()
+            observed_unix = time.time()
+            if self.message_store is not None:
+                record = self.message_store.observe(
+                    self.message_records,
+                    text=item.text,
+                    frequency_hz=self.entry.frequency_hz,
+                    confidence=item.confidence,
+                    observed_unix=observed_unix,
+                )
+            else:
+                record = MessageRecord(
+                    text=item.text,
+                    frequency_hz=self.entry.frequency_hz,
+                    first_seen_unix=observed_unix,
+                    last_seen_unix=observed_unix,
+                    confidence=item.confidence,
+                    agreement=1.0,
+                    verified=True,
+                )
+            LOG.info(
+                "decoded Morse candidate confidence=%.2f agreement=%.2f "
+                "evidence=%d verified=%s text=%r",
+                record.confidence,
+                record.agreement,
+                record.evidence_count,
+                record.verified,
+                record.text,
+            )
+            self.last_morse_candidate = record.text
+            self.last_morse_candidate_confidence = min(
+                record.confidence,
+                record.agreement if record.agreement > 0.0 else record.confidence,
+            )
+            # Raw candidates remain in the durable evidence set but do not
+            # become a user-facing callsign/message until independent repeats
+            # agree. A wrong valid Morse pattern is otherwise dangerously easy
+            # to mislabel as a 100%-certain callsign.
+            if not record.verified:
+                continue
+            suppress_popup = (
+                record.text == self.last_morse_message
+                and now - self._last_morse_message_at
+                < self.MORSE_DUPLICATE_SECONDS
+            )
+            self.last_morse_message = record.text
+            self.last_morse_confidence = record.display_confidence
+            self._last_morse_message_at = now
+            if not suppress_popup:
+                self._queue_message_record(record, replay=False)
+
+    def _queue_message_record(
+        self,
+        record: MessageRecord,
+        *,
+        replay: bool,
+        display: Any | None = None,
+    ) -> None:
+        show_message = getattr(display or self.display, "show_message", None)
+        if not callable(show_message):
+            return
+        try:
+            show_message(
+                record.text,
+                record.display_confidence,
+                frequency_hz=record.frequency_hz,
+                repeat_count=record.repeat_count,
+                observed_unix=record.last_seen_unix,
+                replay=replay,
+            )
+        except TypeError:
+            # Third-party/legacy display adapters can continue showing the
+            # transient text even though they cannot render durable metadata.
+            show_message(record.text, record.display_confidence)
+
+    def _replay_message_history(self, display: Any | None = None) -> None:
+        # The native viewer is deliberately bounded to sixteen records. Send
+        # oldest-to-newest so its final cursor lands on the latest detection.
+        verified = [record for record in self.message_records if record.verified]
+        for record in verified[-16:]:
+            self._queue_message_record(record, replay=True, display=display)
+
     def _connect_display(self) -> None:
         try:
             self.display.connect()
@@ -160,14 +270,36 @@ class FoxhuntApp:
                 # the optional Main-SD splash asset yet.
                 LOG.warning("WaveRider splash unavailable: %s", error)
             self.display.build(self.frequency_list, self.selected)
+            self._replay_message_history()
+            self._display_ever_connected = True
         except DisplayUnavailable as error:
             self._drop_display(error)
+
+    def _recover_initial_shell_route(self, now: float) -> bool:
+        """Release only a boot-race shell, never a later intentional terminal."""
+
+        if (
+            self._display_ever_connected
+            or self._display_shell_recovery_done
+            or now - self._started_at < self.INITIAL_SHELL_RECOVERY_GRACE_SECONDS
+            or now - self._started_at > self.INITIAL_SHELL_RECOVERY_SECONDS
+        ):
+            return False
+        result = release_initial_shell_route()
+        if result.released:
+            self._display_shell_recovery_done = True
+            LOG.warning("boot display recovery: %s", result.message)
+            return True
+        LOG.info("boot display recovery pending: %s", result.message)
+        return False
 
     def _drop_display(self, error: Exception) -> None:
         LOG.warning("display unavailable: %s", error)
         self.display.close()
         self.display = NullDisplay()
-        self._display_retry_at = time.monotonic() + self.DISPLAY_RETRY_SECONDS
+        now = time.monotonic()
+        recovered = self._recover_initial_shell_route(now)
+        self._display_retry_at = now + (1.0 if recovered else self.DISPLAY_RETRY_SECONDS)
 
     def _retry_display_if_needed(self) -> None:
         if self.headless or not isinstance(self.display, NullDisplay):
@@ -185,12 +317,14 @@ class FoxhuntApp:
                     self.alert_settings.threshold_dbfs,
                 )
             candidate.build(self.frequency_list, self.selected)
+            self._replay_message_history(candidate)
         except DisplayUnavailable as error:
             LOG.warning("display reconnect failed: %s", error)
             candidate.close()
             self._display_retry_at = now + self.DISPLAY_RETRY_SECONDS
             return
         self.display = candidate
+        self._display_ever_connected = True
         LOG.info("display reconnected")
 
     def _apply_pending_selection(self) -> bool:
@@ -217,7 +351,7 @@ class FoxhuntApp:
         self.editor_mode = False
         self.display.build(self.frequency_list, self.selected)
         self.display.set_button_labels(
-            ("LISTS", "AUDIO", "NEXT", "PREV", "REFRESH")
+            ("LISTS", "MSGS", "NEXT", "PREV", "REFRESH")
         )
         if self.capture_paused:
             self.display.set_status("PAUSED")
@@ -435,6 +569,18 @@ class FoxhuntApp:
 
     def _handle_action(self, action: str) -> None:
         LOG.info("button action: %s", action)
+        if action == "messages_clear":
+            if self.message_store is not None:
+                self.message_store.clear(self.message_records)
+            else:
+                self.message_records.clear()
+            self.last_morse_message = None
+            self.last_morse_confidence = None
+            self.last_morse_candidate = None
+            self.last_morse_candidate_confidence = None
+            self._last_morse_message_at = 0.0
+            LOG.info("cleared persisted CW message and candidate history")
+            return
         if action.startswith("alert_enabled:"):
             self.alert_settings.enabled = action.endswith(":1")
             self._save_alert_settings()
@@ -476,7 +622,7 @@ class FoxhuntApp:
             if action == "gray":
                 self._show_lists()
             elif action == "yellow":
-                self.display.set_footer("AUDIO CONTROLS ARE NOT AVAILABLE YET")
+                self.display.set_footer("MESSAGE HISTORY IS IN THE NATIVE APP")
             elif action == "green":
                 self.pending_delta += 1
             elif action == "blue":
@@ -506,10 +652,11 @@ class FoxhuntApp:
                 self.alert_settings.enabled,
                 self.alert_settings.threshold_dbfs,
             )
-        # A Live-list commit carries both settings in wr_count. Rebuilding the
-        # mailbox does not restart or retune the SDR; the native alert page
-        # remains open and repaints with the persisted values.
-        self.display.build(self.frequency_list, self.selected)
+        # The native page originated this command and has already applied the
+        # new value locally. Do not republish all 16 frequencies merely to
+        # echo the setting back: that long mailbox transaction competes with
+        # live rows and can leave the command/status UI stale. The persisted
+        # value is included in the next ordinary build or service reconnect.
 
     def _add_saved_frequency(self, frequency_hz: int) -> None:
         if len(self.saved_frequencies) >= 100:
@@ -641,10 +788,13 @@ class FoxhuntApp:
             self.dirty = True
 
     def run(self) -> int:
-        self._connect_display()
-        self.sdr.start(self.entry)
         self.status.write(state="starting", frequency_hz=self.entry.frequency_hz)
         try:
+            # RTL-SDR capture is independent of the Main/display handshake.
+            # Start it first so USB initialization and the first FFT row can
+            # proceed while WaveRider connects to the app-signal mailbox.
+            self.sdr.start(self.entry)
+            self._connect_display()
             while not self.stop_event.is_set():
                 self._retry_display_if_needed()
                 if self._apply_pending_selection():
@@ -673,6 +823,7 @@ class FoxhuntApp:
                         self.display.update_receiver(self.entry, item.peak_dbfs, peak_offset)
                         display_started = time.monotonic()
                         self.display.push_waterfall(quantized)
+                        self._drain_decoded_messages()
                         display_finished = time.monotonic()
                         self._display_push_ms = (display_finished - display_started) * 1000.0
                         self._waterfall_timestamps.append(display_finished)
@@ -706,6 +857,41 @@ class FoxhuntApp:
                     waterfall_row_rate_hz=round(row_rate_hz, 2),
                     display_push_ms=round(self._display_push_ms, 1),
                     sdr_queue_depth=self.sdr.rows.qsize(),
+                    morse_message=self.last_morse_message,
+                    morse_confidence=self.last_morse_confidence,
+                    morse_history_count=sum(
+                        1 for record in self.message_records if record.verified
+                    ),
+                    morse_candidate_count=sum(
+                        1 for record in self.message_records if not record.verified
+                    ),
+                    morse_candidate=self.last_morse_candidate,
+                    morse_candidate_confidence=self.last_morse_candidate_confidence,
+                    morse_unit_ms=round(
+                        float(
+                            getattr(
+                                getattr(
+                                    getattr(self.sdr, "morse_decoder", None),
+                                    "timing",
+                                    None,
+                                ),
+                                "unit_seconds",
+                                0.0,
+                            )
+                        )
+                        * 1000.0,
+                        1,
+                    ),
+                    morse_tone_hz=round(
+                        float(
+                            getattr(
+                                getattr(self.sdr, "morse_decoder", None),
+                                "detected_tone_hz",
+                                0.0,
+                            )
+                        ),
+                        1,
+                    ),
                 )
                 if self.once:
                     return 0
@@ -754,6 +940,8 @@ def main() -> int:
     saved_frequencies = library_store.load_or_seed(lists)
     alert_store = PocketAlertStore(Path(args.state_dir) / "pocket-alert.json")
     alert_settings = alert_store.load_or_default()
+    message_store = MessageStore(Path(args.state_dir) / "messages.json")
+    message_records = message_store.load_or_empty()
 
     app = FoxhuntApp(
         selected_list,
@@ -766,6 +954,8 @@ def main() -> int:
         saved_frequencies=saved_frequencies,
         alert_store=alert_store,
         alert_settings=alert_settings,
+        message_store=message_store,
+        message_records=message_records,
     )
     signal.signal(signal.SIGTERM, lambda *_: app.stop())
     signal.signal(signal.SIGINT, lambda *_: app.stop())

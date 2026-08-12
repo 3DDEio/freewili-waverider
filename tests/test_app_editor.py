@@ -110,7 +110,7 @@ class AppEditorTests(unittest.TestCase):
             app._show_live()
             self.assertEqual(
                 app.display.button_labels,
-                ("LISTS", "AUDIO", "NEXT", "PREV", "REFRESH"),
+                ("LISTS", "MSGS", "NEXT", "PREV", "REFRESH"),
             )
             app._handle_action("gray")
             self.assertTrue(app.lists_mode)
@@ -130,7 +130,7 @@ class AppEditorTests(unittest.TestCase):
             app._handle_action("library_back")
             self.assertFalse(app.lists_mode)
             app._handle_action("yellow")
-            self.assertIn("AUDIO CONTROLS", app.display.footer)
+            self.assertIn("MESSAGE HISTORY", app.display.footer)
             app._handle_action("green")
             self.assertEqual(app.pending_delta, 1)
             app._handle_action("blue")
@@ -155,6 +155,7 @@ class AppEditorTests(unittest.TestCase):
             self.assertEqual(settings.threshold_dbfs, -47)
             self.assertEqual(app.display.alert, (True, -47))
             self.assertEqual(len(app.sdr.started), starts)
+            self.assertEqual(app.display.built, 0)
 
     def test_stop_and_start_buttons_control_capture(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

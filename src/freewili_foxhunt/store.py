@@ -7,7 +7,9 @@ import os
 import re
 import shutil
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from .models import FrequencyEntry, FrequencyList
@@ -90,6 +92,355 @@ class PocketAlertStore:
         settings = PocketAlertSettings()
         self.save(settings)
         return settings
+
+
+@dataclass(slots=True)
+class MessageRecord:
+    """One durable CW message observation, coalesced across beacon repeats."""
+
+    text: str
+    frequency_hz: int
+    first_seen_unix: float
+    last_seen_unix: float
+    repeat_count: int = 1
+    confidence: float = 0.0
+    variants: list[str] | None = None
+    variant_counts: dict[str, int] | None = None
+    evidence_count: int = 0
+    agreement: float = 0.0
+    verified: bool = False
+
+    def validate(self) -> None:
+        text = " ".join(self.text.upper().split())
+        if not text or len(text) > 90:
+            raise ValueError("message text must contain 1 to 90 characters")
+        if not 24_000_000 <= self.frequency_hz <= 1_766_000_000:
+            raise ValueError("message frequency is outside the RTL-SDR range")
+        if self.first_seen_unix < 0 or self.last_seen_unix < self.first_seen_unix:
+            raise ValueError("message timestamps are invalid")
+        if self.repeat_count < 1:
+            raise ValueError("message repeat count must be positive")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("message confidence must be between zero and one")
+        if self.evidence_count < 0:
+            raise ValueError("message evidence count cannot be negative")
+        if not 0.0 <= self.agreement <= 1.0:
+            raise ValueError("message agreement must be between zero and one")
+        self.text = text
+        variants = self.variants if self.variants is not None else [text]
+        self.variants = list(
+            dict.fromkeys(" ".join(value.upper().split())[:90] for value in variants)
+        )[-8:]
+        if text not in self.variants:
+            self.variants.append(text)
+            self.variants = self.variants[-8:]
+        counts: dict[str, int] = {}
+        for value, count in (self.variant_counts or {}).items():
+            normalized = " ".join(value.upper().split())[:90]
+            if normalized and int(count) > 0:
+                counts[normalized] = counts.get(normalized, 0) + int(count)
+        self.variant_counts = counts
+
+    @property
+    def display_confidence(self) -> float:
+        """Quality shown to users combines decode quality and repeat agreement."""
+
+        if not self.verified:
+            return 0.0
+        return min(self.confidence, self.agreement)
+
+    def to_dict(self) -> dict[str, object]:
+        self.validate()
+        return {
+            "text": self.text,
+            "frequency_hz": self.frequency_hz,
+            "first_seen_unix": self.first_seen_unix,
+            "last_seen_unix": self.last_seen_unix,
+            "repeat_count": self.repeat_count,
+            "confidence": self.confidence,
+            "variants": self.variants,
+            "variant_counts": self.variant_counts,
+            "evidence_count": self.evidence_count,
+            "agreement": self.agreement,
+            "verified": self.verified,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "MessageRecord":
+        record = cls(
+            text=str(payload["text"]),
+            frequency_hz=int(payload["frequency_hz"]),
+            first_seen_unix=float(payload["first_seen_unix"]),
+            last_seen_unix=float(payload["last_seen_unix"]),
+            repeat_count=int(payload.get("repeat_count", 1)),
+            confidence=float(payload.get("confidence", 0.0)),
+            variants=[str(value) for value in payload.get("variants", [])],
+            variant_counts={
+                str(key): int(value)
+                for key, value in dict(payload.get("variant_counts", {})).items()
+            },
+            evidence_count=int(payload.get("evidence_count", 0)),
+            agreement=float(payload.get("agreement", 0.0)),
+            verified=bool(payload.get("verified", False)),
+        )
+        record.validate()
+        return record
+
+
+class MessageStore:
+    """Atomic, bounded CW history with conservative repeat coalescing."""
+
+    MAX_RECORDS = 100
+    SIMILARITY_THRESHOLD = 0.65
+    CLUSTER_WINDOW_SECONDS = 600.0
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+
+    @staticmethod
+    def _normalized(text: str) -> str:
+        return " ".join(text.upper().split())
+
+    @classmethod
+    def _similar(cls, first: str, second: str) -> bool:
+        first = cls._normalized(first)
+        second = cls._normalized(second)
+        if first == second:
+            return True
+        # Unknown symbols are decoder erasures, not meaningful content.  Drop
+        # them only for clustering so independent receptions of one repeating
+        # beacon can improve a stored record without merging unrelated text.
+        first_known = first.replace("?", "")
+        second_known = second.replace("?", "")
+        if min(len(first_known), len(second_known)) < 4:
+            return False
+        length_ratio = min(len(first_known), len(second_known)) / max(
+            len(first_known), len(second_known)
+        )
+        return (
+            length_ratio >= 0.65
+            and SequenceMatcher(None, first_known, second_known).ratio()
+            >= cls.SIMILARITY_THRESHOLD
+        )
+
+    @staticmethod
+    def _quality(text: str, confidence: float) -> tuple[float, int, int]:
+        return (
+            confidence,
+            -text.count("?"),
+            sum(character.isalnum() for character in text),
+        )
+
+    @staticmethod
+    def _fill_erasures(first: str, second: str) -> str | None:
+        """Combine aligned receptions only when every conflict is an erasure."""
+
+        if len(first) != len(second):
+            return None
+        merged: list[str] = []
+        for left, right in zip(first, second):
+            if left == right:
+                merged.append(left)
+            elif left == "?":
+                merged.append(right)
+            elif right == "?":
+                merged.append(left)
+            else:
+                return None
+        return "".join(merged)
+
+    @staticmethod
+    def _consensus(variant_counts: dict[str, int], fallback: str) -> tuple[str, float]:
+        """Return a weighted, aligned consensus and its reception agreement.
+
+        Earlier builds deduplicated variants, so six matching receptions had
+        the same vote as one noisy outlier.  Counts now preserve real evidence;
+        the medoid reception supplies alignment and repeated positions vote in
+        proportion to how often they were actually heard.
+        """
+
+        if not variant_counts:
+            return fallback, 0.0
+        references = list(variant_counts)
+        reference = max(
+            references,
+            key=lambda candidate: sum(
+                SequenceMatcher(None, candidate, other).ratio() * count
+                for other, count in variant_counts.items()
+            ),
+        )
+        votes: list[Counter[str]] = [
+            Counter({character: variant_counts[reference]})
+            if character != "?"
+            else Counter()
+            for character in reference
+        ]
+        for variant, weight in variant_counts.items():
+            if variant == reference:
+                continue
+            matcher = SequenceMatcher(None, reference, variant)
+            for tag, first_start, first_stop, second_start, second_stop in matcher.get_opcodes():
+                if tag == "equal":
+                    for offset in range(first_stop - first_start):
+                        character = variant[second_start + offset]
+                        if character != "?":
+                            votes[first_start + offset][character] += weight
+                elif tag == "replace" and first_stop - first_start == second_stop - second_start:
+                    for offset in range(first_stop - first_start):
+                        character = variant[second_start + offset]
+                        if character != "?":
+                            votes[first_start + offset][character] += weight
+        result = list(reference)
+        for index, counts in enumerate(votes):
+            if not counts:
+                continue
+            replacement, support = counts.most_common(1)[0]
+            reference_support = counts[result[index]]
+            if support >= 2 and support > reference_support:
+                result[index] = replacement
+            elif result[index] == "?" and support >= 1:
+                result[index] = replacement
+        consensus = "".join(result)
+        total = sum(variant_counts.values())
+        agreement = sum(
+            SequenceMatcher(None, consensus, variant).ratio() * count
+            for variant, count in variant_counts.items()
+        ) / max(1, total)
+        return consensus, agreement
+
+    def save(self, records: list[MessageRecord]) -> Path:
+        records = sorted(records, key=lambda item: item.last_seen_unix)[
+            -self.MAX_RECORDS :
+        ]
+        payload = json.dumps(
+            {
+                "schema_version": 2,
+                "messages": [record.to_dict() for record in records],
+            },
+            indent=2,
+            sort_keys=True,
+        ) + "\n"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", suffix=".tmp", dir=self.path.parent
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, self.path)
+            directory_fd = os.open(self.path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            if os.path.exists(temporary_name):
+                os.unlink(temporary_name)
+        return self.path
+
+    def load(self) -> list[MessageRecord]:
+        with self.path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if int(payload.get("schema_version", 1)) not in (1, 2):
+            raise ValueError("unsupported message-history schema")
+        records = [MessageRecord.from_dict(item) for item in payload["messages"]]
+        return sorted(records, key=lambda item: item.last_seen_unix)[
+            -self.MAX_RECORDS :
+        ]
+
+    def load_or_empty(self) -> list[MessageRecord]:
+        if not self.path.exists():
+            self.save([])
+            return []
+        return self.load()
+
+    def clear(self, records: list[MessageRecord]) -> Path:
+        """Clear in-memory and persisted message history atomically."""
+
+        records.clear()
+        return self.save(records)
+
+    def observe(
+        self,
+        records: list[MessageRecord],
+        *,
+        text: str,
+        frequency_hz: int,
+        confidence: float,
+        observed_unix: float,
+    ) -> MessageRecord:
+        normalized = self._normalized(text)[:90]
+        matches = [
+            record
+            for record in records
+            if record.frequency_hz == frequency_hz
+            and observed_unix - record.last_seen_unix <= self.CLUSTER_WINDOW_SECONDS
+            and self._similar(record.text, normalized)
+        ]
+        match = max(matches, key=lambda item: item.last_seen_unix, default=None)
+        if match is None:
+            match = MessageRecord(
+                text=normalized,
+                frequency_hz=frequency_hz,
+                first_seen_unix=observed_unix,
+                last_seen_unix=observed_unix,
+                confidence=confidence,
+                variants=[normalized],
+                variant_counts={normalized: 1},
+                evidence_count=1,
+            )
+            match.validate()
+            records.append(match)
+        else:
+            assert match.variants is not None
+            assert match.variant_counts is not None
+            for other in matches:
+                if other is match:
+                    continue
+                assert other.variants is not None
+                match.variants.extend(other.variants)
+                for variant, count in (other.variant_counts or {}).items():
+                    match.variant_counts[variant] = (
+                        match.variant_counts.get(variant, 0) + count
+                    )
+                match.repeat_count += other.repeat_count
+                match.evidence_count += other.evidence_count
+                match.first_seen_unix = min(
+                    match.first_seen_unix, other.first_seen_unix
+                )
+                match.confidence = max(match.confidence, other.confidence)
+                records.remove(other)
+            if normalized not in match.variants:
+                match.variants.append(normalized)
+            match.variants = list(dict.fromkeys(match.variants))[-8:]
+            match.variant_counts[normalized] = match.variant_counts.get(normalized, 0) + 1
+            combined = self._fill_erasures(match.text, normalized)
+            if combined is not None:
+                match.text = combined
+            elif self._quality(normalized, confidence) > self._quality(
+                match.text, match.confidence
+            ):
+                match.text = normalized
+            match.last_seen_unix = observed_unix
+            match.repeat_count += 1
+            match.evidence_count += 1
+            match.confidence = max(match.confidence, confidence)
+            match.text, match.agreement = self._consensus(
+                match.variant_counts, match.text
+            )
+            match.verified = (
+                match.evidence_count >= 3
+                and match.confidence >= 0.82
+                and match.agreement >= 0.72
+            )
+            match.validate()
+        records.sort(key=lambda item: item.last_seen_unix)
+        if len(records) > self.MAX_RECORDS:
+            del records[: len(records) - self.MAX_RECORDS]
+        self.save(records)
+        return match
 
 
 def slugify(name: str) -> str:

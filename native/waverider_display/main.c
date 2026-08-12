@@ -40,6 +40,9 @@
 #define COL_SELECT   RGB565_BE(15, 67, 59)
 #define COL_BORDER   RGB565_BE(30, 66, 73)
 #define COL_SPLASH_WAVE RGB565_BE(28, 141, 210)
+#define COL_ORCA_INK  RGB565_BE(3, 8, 14)
+#define COL_ORCA_SADDLE RGB565_BE(112, 139, 148)
+#define COL_ORCA_WHITE RGB565_BE(238, 246, 247)
 
 #define WAVERIDER_SPLASH_MS 3000u
 
@@ -62,13 +65,24 @@
 #define MIN_FREQUENCY_KHZ 24000u
 #define MAX_FREQUENCY_KHZ 1766000u
 #define PIN_HAPTIC 46u
-#define HAPTIC_GPIO46_EXPERIMENTAL 0u
-#define HAPTIC_PULSE_ON_US 450000u
-#define HAPTIC_PULSE_OFF_US 220000u
+#define HAPTIC_GPIO46_SOURCE_VERIFIED 1u
+#define HAPTIC_PULSE_ON_US 150000u
+#define HAPTIC_PULSE_OFF_US 80000u
 #define HAPTIC_ALERT_COOLDOWN_US 30000000u
 #define HAPTIC_REARM_HYSTERESIS_TENTHS 30
 #define HAPTIC_PROBE_TOUCH_US 350000u
 #define HAPTIC_PROBE_GAP_US 150000u
+#define LED_BRIGHTNESS_NORMAL 48u
+#define LED_BRIGHTNESS_POCKET 6u
+#define LED_BRIGHTNESS_STARTUP 18u
+#define MESSAGE_MAX_BYTES 90u
+#define MESSAGE_HEADER_BYTES 11u
+#define MESSAGE_TEXT_BYTES (MESSAGE_MAX_BYTES - MESSAGE_HEADER_BYTES)
+#define MESSAGE_HISTORY_MAX 16u
+#define MESSAGE_OVERLAY_US 8000000u
+#define BRIDGE_REOPEN_AFTER_US 3000000u
+#define BRIDGE_REOPEN_INTERVAL_US 5000000u
+#define BRIDGE_MAIN_RESET_AFTER_US 15000000u
 
 /* Main-shell attach/detach can transiently move device-managed USB rails.
  * Keep every rail that WaveRider or its recovery path needs in the accumulated
@@ -117,6 +131,9 @@ typedef enum {
     UI_LISTS,
     UI_DELETE_CONFIRM,
     UI_AUDIO,
+    UI_MESSAGE_FREQUENCIES,
+    UI_MESSAGES,
+    UI_MESSAGE_CLEAR_CONFIRM,
     UI_ADD_FREQUENCY,
     UI_POCKET_ALERT,
     UI_HAPTIC_PROBE,
@@ -127,6 +144,8 @@ static uint32_t s_refresh_from_seq = UINT32_MAX;
 static uint64_t s_last_row_us;
 static uint64_t s_mode_started_us;
 static uint64_t s_ready_led_until_us;
+static bool s_front_led_quiet_active;
+static bool s_front_led_restore_enabled = true;
 static uint16_t s_library_live_mask;
 static uint32_t s_library_total;
 static uint32_t s_library_offset;
@@ -138,7 +157,12 @@ static char s_edit_error[40];
 static uint32_t s_signal_get_calls;
 static uint32_t s_signal_get_ok;
 static uint32_t s_signal_get_failed;
+static uint32_t s_signal_get_consecutive_failed;
 static ow_status s_signal_get_last_status = OW_OK;
+static uint64_t s_bridge_failed_since_us;
+static uint64_t s_bridge_reopen_at_us;
+static bool s_main_reset_attempted;
+static bool s_startup_refresh_attempted;
 static bool s_alert_enabled;
 static int32_t s_alert_threshold_tenths = -500;
 static bool s_alert_armed = true;
@@ -153,6 +177,23 @@ static uint64_t s_haptic_probe_deadline_us;
 static uint32_t s_haptic_probe_saved_ctrl;
 static uint32_t s_haptic_probe_saved_pad;
 static bool s_haptic_probe_saved;
+static char s_message_staging[MESSAGE_MAX_BYTES + 1u];
+static char s_detected_message[MESSAGE_MAX_BYTES + 1u];
+static uint8_t s_message_length;
+static uint8_t s_message_chunks;
+static uint16_t s_message_chunk_mask;
+static uint64_t s_message_until_us;
+typedef struct {
+    char text[MESSAGE_TEXT_BYTES + 1u];
+    uint32_t frequency_khz;
+    uint8_t repeat_count;
+    uint8_t confidence_percent;
+    char seen_time[6];
+} message_record_t;
+static message_record_t s_message_history[MESSAGE_HISTORY_MAX];
+static uint8_t s_message_history_count;
+static uint8_t s_message_history_cursor;
+static uint8_t s_message_frequency_cursor;
 
 static void restore_screen(void);
 static void send_command(uint8_t opcode, uint8_t argument);
@@ -161,6 +202,13 @@ static void draw_library(void);
 static void draw_pocket_alert(void);
 static void draw_pocket_alert_dynamic(void);
 static void draw_haptic_probe(void);
+static void draw_message_overlay(void);
+static void draw_message_frequencies(void);
+static void draw_messages(void);
+static void draw_message_clear_confirmation(void);
+static bool apply_main_power_mask(uint32_t zone_mask);
+static bool apply_main_power_zone(uint8_t zone, bool on,
+                                  uint32_t *live_rails);
 
 static const uint32_t s_digit_places_khz[] = {
     1000000u, 100000u, 10000u, 1000u, 100u, 10u, 1u,
@@ -269,35 +317,83 @@ static void fb_draw_text(int x, int y, int scale, uint16_t fg, uint16_t bg,
     }
 }
 
-static void draw_splash(void) {
-    static const int wave[][2] = {
-        {20, 181}, {54, 181}, {70, 175}, {84, 151}, {98, 105},
-        {112, 164}, {128, 180}, {160, 181}, {177, 173}, {190, 150},
-        {204, 119}, {219, 168}, {236, 181}, {270, 181}, {289, 171},
-        {306, 145}, {322, 91}, {339, 164}, {355, 181}, {460, 181},
+static void draw_splash_frame(uint32_t frame) {
+    /* Twelve calm animation poses keep the whale's motion readable on the
+     * 480 x 320 panel without turning startup into a distracting light show. */
+    static const int8_t whale_bob[] = {
+        0, -2, -4, -5, -4, -2, 0, 2, 4, 5, 4, 2,
     };
+    static const int8_t sound_wave[] = {
+        0, 2, 5, 11, 21, 34, 21, 11, 5, 2, 0, -2,
+        -5, -11, -21, -34, -21, -11, -5, -2, 0, 1, 2, 1,
+    };
+    const uint32_t bob_phase = frame %
+        (sizeof whale_bob / sizeof whale_bob[0]);
+    const int whale_y = whale_bob[bob_phase];
+    const int tail_kick = whale_bob[(bob_phase + 3u) %
+        (sizeof whale_bob / sizeof whale_bob[0])] / 2;
+    const uint32_t wave_count = sizeof sound_wave / sizeof sound_wave[0];
+    const uint32_t wave_phase = (frame * 2u) % wave_count;
     fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
 
-    /* A sound wave becomes the surf line beneath the whale. */
-    for (size_t i = 1; i < sizeof wave / sizeof wave[0]; i++) {
-        fb_draw_line(wave[i - 1][0], wave[i - 1][1],
-                     wave[i][0], wave[i][1], 7, COL_SPLASH_WAVE);
-        fb_draw_line(wave[i - 1][0], wave[i - 1][1] + 8,
-                     wave[i][0], wave[i][1] + 8, 3, COL_BLUE);
+    /* A moving audio waveform becomes three layers of surf beneath the whale.
+     * The phase advances left-to-right while amplitude stays bounded, so the
+     * motion reads as signal energy rather than arbitrary rolling water. */
+    for (int sample = 1; sample <= 48; sample++) {
+        int x0 = (sample - 1) * 10;
+        int x1 = sample * 10;
+        int y0 = 174 - sound_wave[((uint32_t)(sample - 1) + wave_phase) %
+                                  wave_count];
+        int y1 = 174 - sound_wave[((uint32_t)sample + wave_phase) %
+                                  wave_count];
+        fb_draw_line(x0, y0, x1, y1, 6, COL_SPLASH_WAVE);
+        fb_draw_line(x0, y0 + 10, x1, y1 + 10, 3, COL_BLUE);
+        fb_draw_line(x0, y0 + 17, x1, y1 + 17, 2, COL_BORDER);
     }
 
-    /* Procedural surfing whale: no external image or SD lookup required. */
-    fb_fill_ellipse(300, 112, 62, 25, COL_GREEN);
-    fb_fill_ellipse(316, 120, 45, 14, COL_SPLASH_WAVE);
-    fb_fill_triangle(240, 108, 211, 87, 220, 116, COL_GREEN);
-    fb_fill_triangle(240, 116, 214, 138, 221, 111, COL_GREEN);
-    fb_fill_triangle(284, 89, 302, 67, 310, 93, COL_GREEN);
-    fb_fill_ellipse(337, 105, 4, 4, COL_BG);
-    fb_fill_ellipse(338, 104, 1, 1, COL_WHITE);
-    fb_draw_line(349, 123, 361, 117, 3, COL_BG);
-    fb_draw_line(358, 83, 358, 67, 3, COL_BLUE);
-    fb_draw_line(358, 68, 348, 57, 3, COL_BLUE);
-    fb_draw_line(358, 68, 368, 57, 3, COL_BLUE);
+    /* Procedural surfing orca: distinctive anatomy without an SD image.
+     * Cyan edging preserves the silhouette on the near-black instrument
+     * background; eye patch, belly, saddle, dorsal, flukes, and pectoral fin
+     * make the animal read as an orca even at 480 x 320. */
+    fb_fill_triangle(242, 108 + whale_y,
+                     208, 83 + whale_y + tail_kick,
+                     220, 116 + whale_y, COL_SPLASH_WAVE);
+    fb_fill_triangle(242, 116 + whale_y,
+                     211, 141 + whale_y - tail_kick,
+                     221, 111 + whale_y, COL_SPLASH_WAVE);
+    fb_fill_triangle(240, 108 + whale_y,
+                     213, 88 + whale_y + tail_kick,
+                     222, 114 + whale_y, COL_ORCA_INK);
+    fb_fill_triangle(240, 115 + whale_y,
+                     215, 136 + whale_y - tail_kick,
+                     222, 112 + whale_y, COL_ORCA_INK);
+
+    /* Tall, slightly swept dorsal fin and lower pectoral fin. */
+    fb_fill_triangle(279, 95 + whale_y, 292, 53 + whale_y,
+                     312, 96 + whale_y, COL_SPLASH_WAVE);
+    fb_fill_triangle(283, 94 + whale_y, 293, 58 + whale_y,
+                     308, 95 + whale_y, COL_ORCA_INK);
+    fb_fill_triangle(313, 126 + whale_y, 342, 153 + whale_y,
+                     332, 121 + whale_y, COL_SPLASH_WAVE);
+    fb_fill_triangle(316, 126 + whale_y, 338, 148 + whale_y,
+                     330, 122 + whale_y, COL_ORCA_INK);
+
+    /* Body, rounded head, and species markings. */
+    fb_fill_ellipse(300, 112 + whale_y, 65, 28, COL_SPLASH_WAVE);
+    fb_fill_ellipse(301, 112 + whale_y, 62, 25, COL_ORCA_INK);
+    fb_fill_ellipse(347, 111 + whale_y, 20, 18, COL_ORCA_INK);
+    fb_fill_ellipse(305, 96 + whale_y, 18, 7, COL_ORCA_SADDLE);
+    fb_fill_ellipse(315, 125 + whale_y, 40, 9, COL_ORCA_WHITE);
+    fb_fill_ellipse(345, 119 + whale_y, 16, 9, COL_ORCA_WHITE);
+    fb_fill_ellipse(337, 101 + whale_y, 12, 5, COL_ORCA_WHITE);
+    fb_fill_ellipse(341, 101 + whale_y, 2, 2, COL_ORCA_INK);
+    fb_draw_line(347, 120 + whale_y, 362, 116 + whale_y,
+                 2, COL_ORCA_INK);
+
+    /* A small blow and a wave-colored highlight reinforce upward motion. */
+    fb_draw_line(358, 83 + whale_y, 358, 67 + whale_y, 3, COL_BLUE);
+    fb_draw_line(358, 68 + whale_y, 348, 57 + whale_y, 3, COL_BLUE);
+    fb_draw_line(358, 68 + whale_y, 368, 57 + whale_y, 3, COL_BLUE);
 
     fb_draw_text(132, 220, 4, COL_WHITE, COL_BG, "WaveRider");
     fb_draw_text(150, 267, 2, COL_GREEN, COL_BG, "RIDE THE SIGNAL");
@@ -305,15 +401,20 @@ static void draw_splash(void) {
 }
 
 static void show_splash(void) {
-    draw_splash();
-    restore_screen();
     board_backlight_set(1);
-    uint32_t elapsed_ms = 0;
-    while (elapsed_ms < WAVERIDER_SPLASH_MS) {
-        fw2_app_recovery_task();
-        agentio_task();
-        fw2_app_recovery_sleep_ms(10);
-        elapsed_ms += 10u;
+    uint64_t deadline = time_us_64() +
+                        (uint64_t)WAVERIDER_SPLASH_MS * 1000u;
+    uint32_t frame = 0u;
+    while (time_us_64() < deadline) {
+        draw_splash_frame(frame++);
+        restore_screen();
+        uint64_t frame_deadline = time_us_64() + 100000u;
+        if (frame_deadline > deadline) frame_deadline = deadline;
+        while (time_us_64() < frame_deadline) {
+            fw2_app_recovery_task();
+            agentio_task();
+            fw2_app_recovery_sleep_ms(10);
+        }
     }
 }
 
@@ -380,7 +481,7 @@ static void draw_static(void) {
     fb_draw_text(SCALE_X, 248, 1, COL_DIM, COL_BG,
                  "-70          -50          -30          -10");
     draw_button(0, "LISTS", COL_TEXT);
-    draw_button(1, "AUDIO", COL_YELLOW);
+    draw_button(1, "MSGS", COL_YELLOW);
     draw_button(2, "NEXT", COL_GREEN);
     draw_button(3, "PREV", COL_BLUE);
     draw_button(4, "REFRESH", COL_RED);
@@ -412,6 +513,31 @@ static void draw_list(void) {
         fb_fill_rect(80, 271, 56, 9, COL_PANEL);
         fb_draw_text(80, 271, 1, COL_DIM, COL_PANEL, page);
     }
+    s_fb_dirty = true;
+}
+
+static void draw_message_overlay(void) {
+    if (s_detected_message[0] == '\0' ||
+        time_us_64() >= s_message_until_us || s_ui_mode != UI_LIVE)
+        return;
+    fb_fill_rect(LIST_X + 2, LIST_Y + 2, LIST_W - 4, LIST_H - 19, COL_SELECT);
+    fb_fill_rect(LIST_X + 2, LIST_Y + 2, LIST_W - 4, 2, COL_GREEN);
+    fb_draw_text(14, 39, 2, COL_GREEN, COL_SELECT, "MESSAGE");
+    fb_draw_text(14, 58, 2, COL_GREEN, COL_SELECT, "DETECTED");
+    int offset = 0;
+    for (int line_index = 0;
+         line_index < 8 && s_detected_message[offset] != '\0';
+         line_index++) {
+        char line[20];
+        int count = 0;
+        while (count < 19 && s_detected_message[offset] != '\0') {
+            line[count++] = s_detected_message[offset++];
+        }
+        line[count] = '\0';
+        fb_draw_text(12, 87 + line_index * 16, 1, COL_TEXT, COL_SELECT, line);
+    }
+    fb_draw_text(12, 221, 1, COL_DIM, COL_SELECT, "MORSE / NFM 800 HZ");
+    fb_draw_text(12, 256, 1, COL_GREEN, COL_PANEL, "AUTO-CLOSE 8 SEC");
     s_fb_dirty = true;
 }
 
@@ -454,7 +580,9 @@ static const char *startup_stage_text(void) {
     case 0: return "POWERING CM0";
     case 1: return "CONNECTING MAIN";
     case 2: return "STARTING CM0 LINUX";
-    default: return "WAITING FOR SDR DATA";
+    case 3: return "WAITING FOR CM0 BRIDGE";
+    case 4: return "STARTING WAVERIDER";
+    default: return "INITIALIZING RTL-SDR";
     }
 }
 
@@ -464,21 +592,44 @@ static void draw_startup_status(void) {
                            ? 0u
                            : (uint32_t)((time_us_64() - s_mode_started_us) /
                                         1000000u);
-    int progress = 35 + (int)s_startup_stage * 55;
+    /* Six verified milestones occupy six sevenths of the bar. The final
+     * seventh is earned only when poll_frame receives the first SDR row and
+     * replaces this view with the live waterfall. */
+    int progress = ((int)s_startup_stage + 1) * 260 / 7;
     if (progress > 250) progress = 250;
+    bool bridge_locked = s_main_reset_attempted &&
+                         s_bridge_failed_since_us != 0u &&
+                         time_us_64() - s_bridge_failed_since_us >=
+                             BRIDGE_MAIN_RESET_AFTER_US + 5000000u;
+    bool data_stalled = s_last_row_us == 0u && elapsed >= 60u;
     fb_fill_rect(PLOT_X, PLOT_Y, PLOT_W, PLOT_H, COL_PANEL);
-    fb_draw_text(PLOT_X + 16, PLOT_Y + 13, 2, COL_TEXT, COL_PANEL,
-                 "WAVERIDER STARTING");
+    fb_draw_text(PLOT_X + 16, PLOT_Y + 13,
+                 bridge_locked || data_stalled ? 1 : 2,
+                 bridge_locked || data_stalled ? COL_YELLOW : COL_TEXT,
+                 COL_PANEL,
+                 bridge_locked ? "MAIN BRIDGE LOCKED"
+                               : (data_stalled ? "CM0 DATA STALLED"
+                                               : "WAVERIDER STARTING"));
     fb_fill_rect(PLOT_X + 16, PLOT_Y + 43, 260, 10, COL_BORDER);
     fb_fill_rect(PLOT_X + 16, PLOT_Y + 43, progress, 10, COL_GREEN);
     int pulse = (int)((elapsed * 23u) % 250u);
     fb_fill_rect(PLOT_X + 16 + pulse, PLOT_Y + 41, 5, 14, COL_WHITE);
-    fb_draw_text(PLOT_X + 16, PLOT_Y + 66, 2, COL_YELLOW, COL_PANEL,
-                 startup_stage_text());
+    fb_draw_text(PLOT_X + 16, PLOT_Y + 66,
+                 bridge_locked || data_stalled ? 1 : 2,
+                 bridge_locked || data_stalled ? COL_YELLOW : COL_GREEN,
+                 COL_PANEL,
+                 bridge_locked ? "AUTO RECOVERY DID NOT COMPLETE"
+                               : (data_stalled ? "NO COMPLETE SDR ROW RECEIVED"
+                                               : startup_stage_text()));
     snprintf(line, sizeof line, "ELAPSED %lu SEC", (unsigned long)elapsed);
     fb_draw_text(PLOT_X + 16, PLOT_Y + 93, 1, COL_DIM, COL_PANEL, line);
-    fb_draw_text(PLOT_X + 16, PLOT_Y + 111, 1, COL_DIM, COL_PANEL,
-                 "LIST BROWSING IS READY");
+    fb_draw_text(PLOT_X + 16, PLOT_Y + 111, 1,
+                 bridge_locked || data_stalled ? COL_YELLOW : COL_DIM,
+                 COL_PANEL,
+                 bridge_locked ? "HOLD HOME; MAIN SOFTWARE RESET"
+                               : (data_stalled
+                                      ? "PRESS REFRESH; THEN MAIN RESET"
+                                      : "LIST BROWSING IS READY"));
     s_fb_dirty = true;
 }
 
@@ -743,8 +894,214 @@ static void draw_audio_page(void) {
     s_fb_dirty = true;
 }
 
+static uint8_t message_frequency_count(void) {
+    uint32_t seen[MESSAGE_HISTORY_MAX];
+    uint8_t count = 0u;
+    for (int history = (int)s_message_history_count - 1; history >= 0; history--) {
+        uint32_t frequency = s_message_history[history].frequency_khz;
+        bool duplicate = false;
+        for (uint8_t index = 0u; index < count; index++) {
+            if (seen[index] == frequency) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) seen[count++] = frequency;
+    }
+    return count;
+}
+
+static uint32_t message_frequency_at(uint8_t selected) {
+    uint32_t seen[MESSAGE_HISTORY_MAX];
+    uint8_t count = 0u;
+    for (int history = (int)s_message_history_count - 1; history >= 0; history--) {
+        uint32_t frequency = s_message_history[history].frequency_khz;
+        bool duplicate = false;
+        for (uint8_t index = 0u; index < count; index++) {
+            if (seen[index] == frequency) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) continue;
+        if (count == selected) return frequency;
+        seen[count++] = frequency;
+    }
+    return 0u;
+}
+
+static uint8_t message_count_for_frequency(uint32_t frequency_khz) {
+    uint8_t count = 0u;
+    for (uint8_t index = 0u; index < s_message_history_count; index++) {
+        if (s_message_history[index].frequency_khz == frequency_khz) count++;
+    }
+    return count;
+}
+
+static void select_latest_message_for_frequency(uint32_t frequency_khz) {
+    for (int index = (int)s_message_history_count - 1; index >= 0; index--) {
+        if (s_message_history[index].frequency_khz == frequency_khz) {
+            s_message_history_cursor = (uint8_t)index;
+            return;
+        }
+    }
+}
+
+static void step_message_for_frequency(int delta) {
+    if (s_message_history_count == 0u) return;
+    uint32_t frequency =
+        s_message_history[s_message_history_cursor].frequency_khz;
+    int index = s_message_history_cursor;
+    for (uint8_t attempts = 0u; attempts < s_message_history_count; attempts++) {
+        index = (index + delta + s_message_history_count) % s_message_history_count;
+        if (s_message_history[index].frequency_khz == frequency) {
+            s_message_history_cursor = (uint8_t)index;
+            return;
+        }
+    }
+}
+
+static void draw_message_frequencies(void) {
+    char line[48];
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+    fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
+    fb_draw_text(300, 5, 2, COL_GREEN, COL_BG, "MSG FREQUENCIES");
+    fb_fill_rect(14, 38, 452, 235, COL_PANEL);
+    uint8_t frequency_count = message_frequency_count();
+    if (frequency_count == 0u) {
+        s_message_frequency_cursor = 0u;
+        fb_draw_text(82, 88, 3, COL_YELLOW, COL_PANEL, "NO MESSAGES YET");
+        fb_draw_text(58, 142, 1, COL_TEXT, COL_PANEL,
+                     "VERIFIED CW MESSAGES WILL BE GROUPED BY FREQUENCY");
+        fb_draw_text(58, 162, 1, COL_DIM, COL_PANEL,
+                     "UNVERIFIED CANDIDATES ARE NOT SHOWN");
+    } else {
+        if (s_message_frequency_cursor >= frequency_count)
+            s_message_frequency_cursor = frequency_count - 1u;
+        uint8_t first = s_message_frequency_cursor >= 7u
+                            ? s_message_frequency_cursor - 7u
+                            : 0u;
+        for (uint8_t row = 0u; row < 8u && first + row < frequency_count; row++) {
+            uint8_t selected = first + row;
+            uint32_t frequency_khz = message_frequency_at(selected);
+            uint16_t y = (uint16_t)(48u + row * 25u);
+            bool active = selected == s_message_frequency_cursor;
+            if (active) fb_fill_rect(24, y - 2u, 432, 23, COL_SELECT);
+            char frequency[16];
+            format_frequency(frequency, sizeof frequency, frequency_khz * 1000u);
+            fb_draw_text(36, y, 2, active ? COL_WHITE : COL_TEXT,
+                         active ? COL_SELECT : COL_PANEL, frequency);
+            snprintf(line, sizeof line, "%u MESSAGE%s",
+                     (unsigned)message_count_for_frequency(frequency_khz),
+                     message_count_for_frequency(frequency_khz) == 1u ? "" : "S");
+            fb_draw_text(292, y + 3u, 1, active ? COL_GREEN : COL_DIM,
+                         active ? COL_SELECT : COL_PANEL, line);
+        }
+        fb_draw_text(26, 253, 1, COL_DIM, COL_PANEL,
+                     "SELECT A FREQUENCY, THEN OPEN ITS MESSAGE LIST");
+    }
+    draw_button(0, "BACK", COL_TEXT);
+    draw_button(1, "PREV", COL_YELLOW);
+    draw_button(2, "OPEN", COL_GREEN);
+    draw_button(3, "NEXT", COL_BLUE);
+    draw_button(4, "CLEAR", COL_RED);
+    s_fb_dirty = true;
+}
+
+static void draw_messages(void) {
+    char line[64];
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+    fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
+    fb_draw_text(370, 5, 2, COL_GREEN, COL_BG, "MESSAGES");
+    fb_fill_rect(14, 38, 452, 235, COL_PANEL);
+    if (s_message_history_count == 0u) {
+        fb_draw_text(82, 88, 3, COL_YELLOW, COL_PANEL, "NO MESSAGES YET");
+        fb_draw_text(68, 142, 1, COL_TEXT, COL_PANEL,
+                     "CW DETECTIONS WILL REMAIN AVAILABLE HERE");
+        fb_draw_text(68, 162, 1, COL_DIM, COL_PANEL,
+                     "THE CM0 RESTORES RECENT HISTORY AFTER REBOOT");
+    } else {
+        if (s_message_history_cursor >= s_message_history_count)
+            s_message_history_cursor = s_message_history_count - 1u;
+        message_record_t *record =
+            &s_message_history[s_message_history_cursor];
+        uint32_t selected_frequency = record->frequency_khz;
+        uint8_t frequency_total = message_count_for_frequency(selected_frequency);
+        uint8_t frequency_position = 0u;
+        for (uint8_t index = 0u; index <= s_message_history_cursor; index++) {
+            if (s_message_history[index].frequency_khz == selected_frequency)
+                frequency_position++;
+        }
+        snprintf(line, sizeof line, "MESSAGE %u OF %u ON THIS FREQUENCY",
+                 (unsigned)frequency_position, (unsigned)frequency_total);
+        fb_draw_text(26, 49, 1, COL_DIM, COL_PANEL, line);
+        char frequency[16];
+        format_frequency(frequency, sizeof frequency,
+                         record->frequency_khz * 1000u);
+        fb_draw_text(26, 68, 3, COL_WHITE, COL_PANEL, frequency);
+        snprintf(line, sizeof line, "SEEN %s   REPEATS %u   QUALITY %u%%",
+                 record->seen_time, (unsigned)record->repeat_count,
+                 (unsigned)record->confidence_percent);
+        fb_draw_text(244, 76, 1, COL_GREEN, COL_PANEL, line);
+        fb_fill_rect(26, 108, 420, 1, COL_BORDER);
+        int offset = 0;
+        for (int row = 0; row < 7 && record->text[offset] != '\0'; row++) {
+            char text_line[55];
+            int count = 0;
+            while (count < 54 && record->text[offset] != '\0')
+                text_line[count++] = record->text[offset++];
+            text_line[count] = '\0';
+            fb_draw_text(26, 124 + row * 18, 1, COL_TEXT, COL_PANEL,
+                         text_line);
+        }
+        fb_draw_text(26, 253, 1, COL_DIM, COL_PANEL,
+                     "UP/DOWN OR PREV/NEXT STAYS ON THIS FREQUENCY");
+    }
+    draw_button(0, "FREQS", COL_TEXT);
+    draw_button(1, "PREV", COL_YELLOW);
+    draw_button(2, "NEXT", COL_GREEN);
+    draw_button(3, "", COL_BLUE);
+    draw_button(4, "LIVE", COL_RED);
+    s_fb_dirty = true;
+}
+
+static void draw_message_clear_confirmation(void) {
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+    fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
+    fb_draw_text(368, 5, 2, COL_RED, COL_BG, "CLEAR");
+    fb_fill_rect(24, 58, 432, 176, COL_PANEL);
+    fb_draw_text(78, 82, 2, COL_RED, COL_PANEL, "CLEAR ALL MESSAGE HISTORY?");
+    fb_draw_text(58, 126, 1, COL_TEXT, COL_PANEL,
+                 "THIS REMOVES VERIFIED MESSAGES AND CANDIDATES");
+    fb_draw_text(58, 150, 1, COL_YELLOW, COL_PANEL,
+                 "THE ACTION CANNOT BE UNDONE");
+    fb_draw_text(74, 198, 1, COL_BLUE, COL_PANEL,
+                 "CHECK = CLEAR     RED OR BACK = CANCEL");
+    draw_button(0, "CANCEL", COL_TEXT);
+    draw_button(1, "", COL_YELLOW);
+    draw_button(2, "CLEAR", COL_RED);
+    draw_button(3, "", COL_BLUE);
+    draw_button(4, "CANCEL", COL_RED);
+    s_fb_dirty = true;
+}
+
+static void clear_message_history(void) {
+    memset(s_message_history, 0, sizeof s_message_history);
+    s_message_history_count = 0u;
+    s_message_history_cursor = 0u;
+    s_message_frequency_cursor = 0u;
+    s_detected_message[0] = '\0';
+    s_message_until_us = 0u;
+    /* Opcode zero was deliberately left unused by the existing command
+     * protocol. Argument one means clear the complete CM0 message store,
+     * including candidates that are intentionally hidden from this page. */
+    send_command(0u, 1u);
+    s_ui_mode = UI_MESSAGE_FREQUENCIES;
+    draw_message_frequencies();
+}
+
 static void haptic_set(bool on) {
-#if HAPTIC_GPIO46_EXPERIMENTAL
+#if HAPTIC_GPIO46_SOURCE_VERIFIED
     s_haptic_on = on;
     gpio_put(PIN_HAPTIC, on ? 1u : 0u);
     busy_wait_us_32(5u);
@@ -759,7 +1116,7 @@ static void haptic_set(bool on) {
 }
 
 static void haptic_start_three_pulses(void) {
-#if HAPTIC_GPIO46_EXPERIMENTAL
+#if HAPTIC_GPIO46_SOURCE_VERIFIED
     s_haptic_pulses_remaining = 3u;
     haptic_set(true);
     s_haptic_deadline_us = time_us_64() + HAPTIC_PULSE_ON_US;
@@ -767,6 +1124,17 @@ static void haptic_start_three_pulses(void) {
     s_haptic_pulses_remaining = 0u;
     haptic_set(false);
     DIAG("waverider: haptic unavailable; GPIO46 path is not verified\n");
+#endif
+}
+
+static void haptic_test_meshtastic_exact(void) {
+#if HAPTIC_GPIO46_SOURCE_VERIFIED
+    /* Preserve Meshtastic's physically verified three 150 ms pulses and
+     * 80 ms gaps, but schedule them through WaveRider's nonblocking state
+     * machine. The former sleep loop stopped servicing OneWili for 690 ms;
+     * on the narrow v07 route that can discard live SDR/command traffic. */
+    DIAG("waverider: nonblocking Meshtastic haptic TEST begin\n");
+    haptic_start_three_pulses();
 #endif
 }
 
@@ -891,7 +1259,7 @@ static void draw_haptic_probe(void) {
 }
 
 static void pocket_alert_sample(uint64_t now) {
-#if !HAPTIC_GPIO46_EXPERIMENTAL
+#if !HAPTIC_GPIO46_SOURCE_VERIFIED
     (void)now;
     s_alert_enabled = false;
     s_alert_armed = true;
@@ -929,7 +1297,7 @@ static void draw_pocket_alert_dynamic(void) {
     fb_fill_rect(36, 94, 408, 150, COL_PANEL);
 
     snprintf(line, sizeof line, "ALERT       %s",
-             HAPTIC_GPIO46_EXPERIMENTAL
+             HAPTIC_GPIO46_SOURCE_VERIFIED
                  ? (s_alert_enabled ? "ENABLED" : "DISABLED")
                  : "UNAVAILABLE");
     fb_draw_text(42, 101, 2,
@@ -941,10 +1309,10 @@ static void draw_pocket_alert_dynamic(void) {
     snprintf(line, sizeof line, "CURRENT     %s dBFS", value);
     fb_draw_text(42, 163, 2, COL_TEXT, COL_PANEL, line);
 
-    const char *state = "HARDWARE PATH NOT VERIFIED";
+    const char *state = "GPIO46 ACTIVE-HIGH / 12mA";
     uint16_t state_color = COL_YELLOW;
-    if (!HAPTIC_GPIO46_EXPERIMENTAL) {
-        state = "MOTOR DRIVER NOT PUBLISHED";
+    if (!HAPTIC_GPIO46_SOURCE_VERIFIED) {
+        state = "DRIVER DISABLED";
     } else if (s_haptic_pulses_remaining > 0u) {
         state = s_haptic_on ? "TEST: GPIO46 OUTPUT HIGH" : "TEST: PULSE GAP";
         state_color = COL_YELLOW;
@@ -958,9 +1326,9 @@ static void draw_pocket_alert_dynamic(void) {
     if (s_last_alert_us != 0u && now - s_last_alert_us < HAPTIC_ALERT_COOLDOWN_US)
         cooldown = (uint32_t)((HAPTIC_ALERT_COOLDOWN_US -
                               (now - s_last_alert_us) + 999999u) / 1000000u);
-    if (HAPTIC_GPIO46_EXPERIMENTAL)
+    if (HAPTIC_GPIO46_SOURCE_VERIFIED)
         snprintf(line, sizeof line,
-                 "3 PULSES   30 SEC COOLDOWN   READY IN %lu SEC",
+                 "3 X 150 MS   30 SEC COOLDOWN   READY %lu SEC",
                  (unsigned long)cooldown);
     else
         snprintf(line, sizeof line,
@@ -977,17 +1345,17 @@ static void draw_pocket_alert(void) {
     fb_draw_text(42, 66, 2, COL_TEXT, COL_PANEL, "HAPTIC SIGNAL DETECTOR");
     draw_pocket_alert_dynamic();
     draw_button(0, "BACK", COL_TEXT);
-    draw_button(1, HAPTIC_GPIO46_EXPERIMENTAL
+    draw_button(1, HAPTIC_GPIO46_SOURCE_VERIFIED
                        ? (s_alert_enabled ? "DISABLE" : "ENABLE")
                        : "UNAVAILABLE", COL_YELLOW);
     draw_button(2, "-1 dB", COL_GREEN);
     draw_button(3, "+1 dB", COL_BLUE);
-    draw_button(4, HAPTIC_GPIO46_EXPERIMENTAL ? "TEST" : "INFO", COL_RED);
+    draw_button(4, HAPTIC_GPIO46_SOURCE_VERIFIED ? "TEST" : "INFO", COL_RED);
     s_fb_dirty = true;
 }
 
 static void set_alert_enabled(bool enabled) {
-#if !HAPTIC_GPIO46_EXPERIMENTAL
+#if !HAPTIC_GPIO46_SOURCE_VERIFIED
     (void)enabled;
     s_alert_enabled = false;
     s_alert_armed = true;
@@ -1017,7 +1385,22 @@ static void adjust_alert_threshold(int delta_db) {
 
 static void update_health_ui(void) {
     uint64_t now = time_us_64();
+    if (s_message_until_us != 0u && now >= s_message_until_us) {
+        s_message_until_us = 0u;
+        s_detected_message[0] = '\0';
+        if (s_ui_mode == UI_LIVE) draw_list();
+    }
     bool stale = s_last_row_us == 0 || now - s_last_row_us > 3000000u;
+    if (s_ui_mode == UI_STARTUP && s_last_row_us == 0u &&
+        !s_startup_refresh_attempted && s_mode_started_us != 0u &&
+        now - s_mode_started_us >= 30000000u) {
+        /* A refresh command is idempotent and remains in wr_cmd until CM0
+         * acknowledges it. Queue one automatically before declaring startup
+         * stalled, so a live-but-idle service gets a recovery opportunity
+         * without making the user guess whether Refresh is safe. */
+        s_startup_refresh_attempted = true;
+        send_command(5, 0);
+    }
     if (s_ui_mode == UI_LIVE && stale) {
         s_ui_mode = UI_FAULT;
         s_mode_started_us = now;
@@ -1028,7 +1411,11 @@ static void update_health_ui(void) {
 static void enter_live_view(bool clear_plot) {
     bool first_ready = s_ui_mode == UI_STARTUP;
     s_ui_mode = UI_LIVE;
-    if (first_ready) s_ready_led_until_us = time_us_64() + 1500000u;
+    /* Confirm the seventh/final milestone independently of the waterfall.
+     * Fast warm boots can cross mailbox, list, and first-row milestones
+     * between two 250 ms LED refreshes, so keep all seven green long enough
+     * to be unmistakable without delaying live rendering. */
+    if (first_ready) s_ready_led_until_us = time_us_64() + 3000000u;
     draw_static();
     draw_list();
     draw_dynamic();
@@ -1082,18 +1469,124 @@ static void push_waterfall_row(uint16_t words[3]) {
     s_fb_dirty = true;
 }
 
+static void receive_message_chunk(uint32_t metadata, uint32_t words[3],
+                                  bool replay) {
+    uint8_t length = (uint8_t)(metadata & 0xFFu);
+    uint8_t index = (uint8_t)((metadata >> 8u) & 0xFFu);
+    uint8_t chunks = (uint8_t)((metadata >> 16u) & 0xFFu);
+    if (length <= MESSAGE_HEADER_BYTES || length > MESSAGE_MAX_BYTES || chunks == 0u ||
+        chunks > 15u || index >= chunks)
+        return;
+    if (index == 0u || length != s_message_length ||
+        chunks != s_message_chunks) {
+        memset(s_message_staging, 0, sizeof s_message_staging);
+        s_message_length = length;
+        s_message_chunks = chunks;
+        s_message_chunk_mask = 0u;
+    }
+    for (int word = 0; word < 3; word++) {
+        for (int byte = 0; byte < 2; byte++) {
+            uint32_t destination = (uint32_t)index * 6u +
+                                   (uint32_t)word * 2u + (uint32_t)byte;
+            if (destination < length)
+                s_message_staging[destination] =
+                    (char)((words[word] >> (byte * 8)) & 0xFFu);
+        }
+    }
+    s_message_chunk_mask |= (uint16_t)(1u << index);
+    uint16_t complete_mask = (uint16_t)((1u << chunks) - 1u);
+    if (s_message_chunk_mask != complete_mask) return;
+    s_message_staging[length] = '\0';
+    const uint8_t *payload = (const uint8_t *)s_message_staging;
+    uint32_t frequency_khz = (uint32_t)payload[0] |
+                             ((uint32_t)payload[1] << 8u) |
+                             ((uint32_t)payload[2] << 16u) |
+                             ((uint32_t)payload[3] << 24u);
+    if (frequency_khz < MIN_FREQUENCY_KHZ ||
+        frequency_khz > MAX_FREQUENCY_KHZ)
+        return;
+    const char *text = s_message_staging + MESSAGE_HEADER_BYTES;
+    uint8_t history_index = MESSAGE_HISTORY_MAX;
+    for (uint8_t candidate = 0u; candidate < s_message_history_count;
+         candidate++) {
+        if (s_message_history[candidate].frequency_khz == frequency_khz &&
+            strcmp(s_message_history[candidate].text, text) == 0) {
+            history_index = candidate;
+            break;
+        }
+    }
+    if (history_index == MESSAGE_HISTORY_MAX) {
+        if (s_message_history_count < MESSAGE_HISTORY_MAX) {
+            history_index = s_message_history_count++;
+        } else {
+            memmove(&s_message_history[0], &s_message_history[1],
+                    sizeof s_message_history[0] * (MESSAGE_HISTORY_MAX - 1u));
+            history_index = MESSAGE_HISTORY_MAX - 1u;
+        }
+    }
+    message_record_t *record = &s_message_history[history_index];
+    memset(record, 0, sizeof *record);
+    record->frequency_khz = frequency_khz;
+    record->repeat_count = payload[4];
+    record->confidence_percent = payload[5] > 100u ? 100u : payload[5];
+    memcpy(record->seen_time, payload + 6u, 5u);
+    record->seen_time[5] = '\0';
+    strncpy(record->text, text, MESSAGE_TEXT_BYTES);
+    record->text[MESSAGE_TEXT_BYTES] = '\0';
+    s_message_history_cursor = history_index;
+    if (!replay) {
+        strncpy(s_detected_message, record->text, MESSAGE_TEXT_BYTES);
+        s_detected_message[MESSAGE_TEXT_BYTES] = '\0';
+        s_message_until_us = time_us_64() + MESSAGE_OVERLAY_US;
+        DIAG("waverider: decoded Morse message '%s'\n", s_detected_message);
+        if (s_ui_mode == UI_LIVE) draw_message_overlay();
+    }
+    if (s_ui_mode == UI_MESSAGES) draw_messages();
+    else if (s_ui_mode == UI_MESSAGE_FREQUENCIES)
+        draw_message_frequencies();
+}
+
+static void update_front_status_led(void) {
+    /* Do not rebuild a complete Main awake mask from the live status bitmap.
+     * USB-hub and CM0 control bits can be absent or transient while their
+     * hardware is still active. Echoing that incomplete snapshot back merely
+     * to clear the front status-LED bit can power down the RTL-SDR hub or
+     * disturb the CM0 route. Pocket Alert therefore dims only WaveRider's
+     * seven RGB LEDs; the independent front indicator remains unchanged until
+     * Main exposes a dedicated, non-mask brightness/enable operation. */
+    s_front_led_quiet_active = false;
+    s_front_led_restore_enabled = false;
+}
+
 static void update_leds(void) {
     uint64_t now = time_us_64();
+    /* Pocket Alert is intended for close, low-attention use. Preserve the
+     * status/RSSI colors while reducing the strip to one eighth of the normal
+     * brightness so the armed indicator does not destroy night vision. */
+    ws2812_set_brightness(s_ui_mode == UI_POCKET_ALERT
+                              ? LED_BRIGHTNESS_POCKET
+                              : (s_ui_mode == UI_STARTUP
+                                     ? LED_BRIGHTNESS_STARTUP
+                                     : LED_BRIGHTNESS_NORMAL));
+    update_front_status_led();
     ws2812_clear();
+    if (now < s_ready_led_until_us) {
+        for (int i = 0; i < 7; i++)
+            ws2812_set_pixel((uint)i, (rgb_t){.r = 0, .g = 190, .b = 75});
+        ws2812_show();
+        return;
+    }
     if (s_ui_mode == UI_STARTUP) {
-        uint64_t elapsed = s_mode_started_us == 0 ? 0 : now - s_mode_started_us;
-        bool overdue = elapsed > 45000000u;
-        rgb_t color = s_startup_stage == 0
-                          ? (rgb_t){.r = 180, .g = 0, .b = 0}
-                          : (rgb_t){.r = 190, .g = 110, .b = 0};
-        if (!overdue || ((now / 400000u) & 1u) == 0u) {
-            for (int i = 0; i < 7; i++) ws2812_set_pixel((uint)i, color);
-        }
+        /* Calm, evidence-based startup progress. Each completed subsystem
+         * adds one soft-green LED from left to right. Do not flash during a
+         * healthy boot: yellow flashing is reserved for a real fault after
+         * startup. The seventh LED appears with the ready/live transition. */
+        int completed = (int)s_startup_stage + 1;
+        if (completed < 1) completed = 1;
+        if (completed > 6) completed = 6;
+        rgb_t color = {.r = 0, .g = 70, .b = 28};
+        for (int i = 0; i < completed; i++)
+            ws2812_set_pixel((uint)i, color);
         ws2812_show();
         return;
     }
@@ -1119,12 +1612,6 @@ static void update_leds(void) {
         ws2812_show();
         return;
     }
-    if (now < s_ready_led_until_us) {
-        for (int i = 0; i < 7; i++)
-            ws2812_set_pixel((uint)i, (rgb_t){.r = 0, .g = 190, .b = 75});
-        ws2812_show();
-        return;
-    }
     int count = (s_rssi_tenths + 700) * 7 / 600;
     if (count < 0) count = 0;
     if (count > 7) count = 7;
@@ -1143,15 +1630,43 @@ static void update_leds(void) {
 
 static bool signal_get(const char *name, double *value) {
     char returned[32];
+    bool primary_health = strcmp(name, "wr_seq") == 0;
     s_signal_get_calls++;
     ow_status status = ow_scripting_app_signals_app_signal_get(
         &s_dev, name, returned, sizeof returned, value);
     s_signal_get_last_status = status;
     if (status == OW_OK && strcmp(returned, name) == 0) {
         s_signal_get_ok++;
+        /* Only a committed live-row sequence proves the receiver mailbox path
+         * is healthy. List and settings signals can remain readable from
+         * Main's cache while wr_seq is wedged; letting those replies clear the
+         * recovery timer leaves the app on WAITING FOR CM0 BRIDGE forever. */
+        if (primary_health) {
+            s_signal_get_consecutive_failed = 0u;
+            s_bridge_failed_since_us = 0u;
+            s_main_reset_attempted = false;
+        }
+        s_link_ok = true;
+        if (s_ui_mode == UI_STARTUP && s_startup_stage < 4u)
+            s_startup_stage = 4u;
         return true;
     }
     s_signal_get_failed++;
+    /* A normal "signal not found" response means Main is alive and CM0 has
+     * not created the mailbox yet. Recover only transport-level failures;
+     * otherwise a healthy, slow cold boot could be reset unnecessarily. */
+    bool transport_failure = status == OW_ERR_TIMEOUT || status == OW_ERR_IO ||
+                             status == OW_ERR_PROTOCOL;
+    if (primary_health && transport_failure) {
+        s_signal_get_consecutive_failed++;
+        if (s_bridge_failed_since_us == 0u)
+            s_bridge_failed_since_us = time_us_64();
+        s_link_ok = false;
+    } else if (primary_health) {
+        s_signal_get_consecutive_failed = 0u;
+        s_bridge_failed_since_us = 0u;
+        s_link_ok = true;
+    }
     if (s_signal_get_failed <= 4u || (s_signal_get_failed & 63u) == 0u) {
         uint8_t raw[48];
         size_t raw_len = ow_fwgui_last_response(raw, sizeof raw);
@@ -1163,6 +1678,42 @@ static bool signal_get(const char *name, double *value) {
         DIAG("\n");
     }
     return false;
+}
+
+static void recover_bridge_link(uint64_t now) {
+    if (s_bridge_failed_since_us == 0u ||
+        s_signal_get_consecutive_failed < 8u)
+        return;
+
+    uint64_t elapsed = now - s_bridge_failed_since_us;
+    if (elapsed >= BRIDGE_MAIN_RESET_AFTER_US && !s_main_reset_attempted) {
+        /* WaveRider is still executing on Display, so this is not a user who
+         * left for Linux Terminal. Reset Main only once; CM0 Linux, lists,
+         * SDR capture, and Display all remain powered. The reset command may
+         * time out because a successful reset intentionally drops its reply. */
+        s_main_reset_attempted = true;
+        DIAG("waverider: bridge transport stale; requesting Main-only reset\n");
+        ow_status status = ow_hardware_settings_home_software_reset(&s_dev);
+        DIAG("waverider: Main-only reset request status=%d\n", (int)status);
+        s_bridge_reopen_at_us = now + 2000000u;
+        return;
+    }
+
+    if (elapsed < BRIDGE_REOPEN_AFTER_US || now < s_bridge_reopen_at_us)
+        return;
+
+    /* Reinitialize the Display-to-Main UART parser before escalating to the
+     * bounded Main-only reset. This is enough for ordinary USB/link loss and
+     * avoids touching either processor when only the local transport wedged. */
+    ow_close(&s_dev);
+    ow_status status = fw2_app_recovery_open_onewili(&s_dev);
+    if (status == OW_OK) {
+        ow_set_timeout(&s_dev, 250u);
+        ow_fwgui_set_power_mask_handler(apply_main_power_mask);
+        ow_fwgui_set_power_zone_handler(apply_main_power_zone);
+    }
+    DIAG("waverider: bridge transport reopen status=%d\n", (int)status);
+    s_bridge_reopen_at_us = now + BRIDGE_REOPEN_INTERVAL_US;
 }
 
 static bool signal_get_u32(const char *name, uint32_t *value) {
@@ -1203,6 +1754,8 @@ static void poll_list(void) {
     s_cursor = (int)selected;
     s_list_seq = sequence;
     s_link_ok = true;
+    if (s_ui_mode == UI_STARTUP && s_startup_stage < 5u)
+        s_startup_stage = 5u;
     if (state == 2u) {
         uint32_t membership = 0u;
         uint32_t total = count;
@@ -1259,6 +1812,21 @@ static void poll_frame(void) {
         !signal_get_u32("wr_row2", &row_values[2]))
         return;
 
+    if (span <= 1u) {
+        receive_message_chunk(frequency, row_values, span == 1u);
+        s_last_row_us = time_us_64();
+        s_row_seq = sequence;
+        s_link_ok = true;
+        update_leds();
+        return;
+    }
+
+    if (frequency != s_frequency && s_message_until_us != 0u) {
+        s_message_until_us = 0u;
+        s_detected_message[0] = '\0';
+        if (s_ui_mode == UI_LIVE) draw_list();
+    }
+
     s_frequency = frequency;
     s_span = span;
     s_rssi_tenths = round_i32(rssi * 10.0);
@@ -1280,6 +1848,7 @@ static void poll_frame(void) {
     if (s_ui_mode == UI_LIVE) {
         push_waterfall_row(rows);
         draw_dynamic();
+        draw_message_overlay();
     } else if (s_ui_mode == UI_STATUS || s_ui_mode == UI_REFRESH ||
                s_ui_mode == UI_FAULT) {
         draw_receiver_status();
@@ -1370,8 +1939,8 @@ static void handle_buttons(void) {
                 adjust_alert_threshold(1);
                 break;
             case UARTKBD_BTN_RED:
-                if (HAPTIC_GPIO46_EXPERIMENTAL) {
-                    haptic_start_three_pulses();
+                if (HAPTIC_GPIO46_SOURCE_VERIFIED) {
+                    haptic_test_meshtastic_exact();
                     draw_pocket_alert_dynamic();
                 } else {
                     s_ui_mode = UI_HAPTIC_PROBE;
@@ -1438,6 +2007,94 @@ static void handle_buttons(void) {
                        event.btn == UARTKBD_BTN_GREY) {
                 s_ui_mode = UI_LISTS;
                 draw_library();
+            }
+            continue;
+        }
+        if (s_ui_mode == UI_MESSAGE_CLEAR_CONFIRM) {
+            if (event.btn == UARTKBD_BTN_NAV_CENTER ||
+                event.btn == UARTKBD_BTN_OK) {
+                clear_message_history();
+            } else if (event.btn == UARTKBD_BTN_RED ||
+                       event.btn == UARTKBD_BTN_CANCEL ||
+                       event.btn == UARTKBD_BTN_GREY) {
+                s_ui_mode = UI_MESSAGE_FREQUENCIES;
+                draw_message_frequencies();
+            }
+            continue;
+        }
+        if (s_ui_mode == UI_MESSAGE_FREQUENCIES) {
+            uint8_t frequency_count = message_frequency_count();
+            switch (event.btn) {
+            case UARTKBD_BTN_NAV_LEFT:
+            case UARTKBD_BTN_NAV_UP:
+            case UARTKBD_BTN_YELLOW:
+                if (frequency_count > 0u)
+                    s_message_frequency_cursor =
+                        (uint8_t)((s_message_frequency_cursor +
+                                   frequency_count - 1u) % frequency_count);
+                draw_message_frequencies();
+                break;
+            case UARTKBD_BTN_NAV_RIGHT:
+            case UARTKBD_BTN_NAV_DOWN:
+            case UARTKBD_BTN_BLUE:
+                if (frequency_count > 0u)
+                    s_message_frequency_cursor =
+                        (uint8_t)((s_message_frequency_cursor + 1u) %
+                                  frequency_count);
+                draw_message_frequencies();
+                break;
+            case UARTKBD_BTN_NAV_CENTER:
+            case UARTKBD_BTN_OK:
+            case UARTKBD_BTN_GREEN:
+                if (frequency_count > 0u) {
+                    uint32_t frequency =
+                        message_frequency_at(s_message_frequency_cursor);
+                    select_latest_message_for_frequency(frequency);
+                    s_ui_mode = UI_MESSAGES;
+                    draw_messages();
+                }
+                break;
+            case UARTKBD_BTN_RED:
+                if (s_message_history_count > 0u) {
+                    s_ui_mode = UI_MESSAGE_CLEAR_CONFIRM;
+                    draw_message_clear_confirmation();
+                }
+                break;
+            case UARTKBD_BTN_GREY:
+            case UARTKBD_BTN_CANCEL:
+                enter_live_view(false);
+                break;
+            default:
+                break;
+            }
+            continue;
+        }
+        if (s_ui_mode == UI_MESSAGES) {
+            switch (event.btn) {
+            case UARTKBD_BTN_NAV_LEFT:
+            case UARTKBD_BTN_NAV_UP:
+            case UARTKBD_BTN_YELLOW:
+                step_message_for_frequency(-1);
+                draw_messages();
+                break;
+            case UARTKBD_BTN_NAV_RIGHT:
+            case UARTKBD_BTN_NAV_DOWN:
+            case UARTKBD_BTN_GREEN:
+                step_message_for_frequency(1);
+                draw_messages();
+                break;
+            case UARTKBD_BTN_NAV_CENTER:
+            case UARTKBD_BTN_OK:
+            case UARTKBD_BTN_GREY:
+                s_ui_mode = UI_MESSAGE_FREQUENCIES;
+                draw_message_frequencies();
+                break;
+            case UARTKBD_BTN_RED:
+            case UARTKBD_BTN_CANCEL:
+                enter_live_view(false);
+                break;
+            default:
+                break;
             }
             continue;
         }
@@ -1551,8 +2208,9 @@ static void handle_buttons(void) {
             send_command(7, 0);
             break;
         case UARTKBD_BTN_YELLOW:
-            s_ui_mode = UI_AUDIO;
-            draw_audio_page();
+            s_ui_mode = UI_MESSAGE_FREQUENCIES;
+            s_message_frequency_cursor = 0u;
+            draw_message_frequencies();
             break;
         case UARTKBD_BTN_GREEN:
             if (s_count > 0) s_cursor = (s_cursor + 1) % s_count;
@@ -1669,13 +2327,75 @@ static void handle_touch(void) {
                 else if (button == 2) adjust_alert_threshold(-1);
                 else if (button == 3) adjust_alert_threshold(1);
                 else if (button == 4) {
-                    if (HAPTIC_GPIO46_EXPERIMENTAL) {
-                        haptic_start_three_pulses();
+                    if (HAPTIC_GPIO46_SOURCE_VERIFIED) {
+                        haptic_test_meshtastic_exact();
                         draw_pocket_alert_dynamic();
                     } else {
                         s_ui_mode = UI_HAPTIC_PROBE;
                         draw_haptic_probe();
                     }
+                }
+            }
+        } else if (s_ui_mode == UI_MESSAGE_CLEAR_CONFIRM) {
+            if (y >= 286u) {
+                int button = (int)(x / 96u);
+                if (button == 2) clear_message_history();
+                else if (button == 0 || button == 4) {
+                    s_ui_mode = UI_MESSAGE_FREQUENCIES;
+                    draw_message_frequencies();
+                }
+            }
+        } else if (s_ui_mode == UI_MESSAGE_FREQUENCIES) {
+            if (y >= 48u && y < 248u) {
+                uint8_t frequency_count = message_frequency_count();
+                uint8_t first = s_message_frequency_cursor >= 7u
+                                    ? s_message_frequency_cursor - 7u
+                                    : 0u;
+                uint8_t row = (uint8_t)((y - 48u) / 25u);
+                if (first + row < frequency_count) {
+                    s_message_frequency_cursor = first + row;
+                    draw_message_frequencies();
+                }
+            } else if (y >= 286u) {
+                int button = (int)(x / 96u);
+                uint8_t frequency_count = message_frequency_count();
+                if (button == 0) {
+                    enter_live_view(false);
+                } else if (button == 1 && frequency_count > 0u) {
+                    s_message_frequency_cursor =
+                        (uint8_t)((s_message_frequency_cursor +
+                                   frequency_count - 1u) % frequency_count);
+                    draw_message_frequencies();
+                } else if (button == 2 && frequency_count > 0u) {
+                    uint32_t frequency =
+                        message_frequency_at(s_message_frequency_cursor);
+                    select_latest_message_for_frequency(frequency);
+                    s_ui_mode = UI_MESSAGES;
+                    draw_messages();
+                } else if (button == 3 && frequency_count > 0u) {
+                    s_message_frequency_cursor =
+                        (uint8_t)((s_message_frequency_cursor + 1u) %
+                                  frequency_count);
+                    draw_message_frequencies();
+                } else if (button == 4 && s_message_history_count > 0u) {
+                    s_ui_mode = UI_MESSAGE_CLEAR_CONFIRM;
+                    draw_message_clear_confirmation();
+                }
+            }
+        } else if (s_ui_mode == UI_MESSAGES) {
+            if (y >= 286u) {
+                int button = (int)(x / 96u);
+                if (button == 0) {
+                    s_ui_mode = UI_MESSAGE_FREQUENCIES;
+                    draw_message_frequencies();
+                } else if (button == 4) {
+                    enter_live_view(false);
+                } else if (button == 1 && s_message_history_count > 0u) {
+                    step_message_for_frequency(-1);
+                    draw_messages();
+                } else if (button == 2 && s_message_history_count > 0u) {
+                    step_message_for_frequency(1);
+                    draw_messages();
                 }
             }
         } else if (s_ui_mode == UI_AUDIO) {
@@ -1763,8 +2483,9 @@ static void handle_touch(void) {
                 send_command(7, 0);
                 break;
             case 1:
-                s_ui_mode = UI_AUDIO;
-                draw_audio_page();
+                s_ui_mode = UI_MESSAGE_FREQUENCIES;
+                s_message_frequency_cursor = 0u;
+                draw_message_frequencies();
                 break;
             case 2:
                 if (s_count > 0) s_cursor = (s_cursor + 1) % s_count;
@@ -1867,23 +2588,17 @@ int main(void) {
     st7796_init();
     ft6336_init();
     agentio_init();
-#if HAPTIC_GPIO46_EXPERIMENTAL
+#if HAPTIC_GPIO46_SOURCE_VERIFIED
     gpio_init(PIN_HAPTIC);
-    /* Loadable apps inherit IO_BANK0 overrides from the stock loader. GPIO46
-     * arrived with inverted input/output behavior on the connected unit, so
-     * normalize every override before treating it as the haptic control. */
-    gpio_set_outover(PIN_HAPTIC, GPIO_OVERRIDE_NORMAL);
-    gpio_set_inover(PIN_HAPTIC, GPIO_OVERRIDE_NORMAL);
-    gpio_set_oeover(PIN_HAPTIC, GPIO_OVERRIDE_NORMAL);
-    gpio_set_irqover(PIN_HAPTIC, GPIO_OVERRIDE_NORMAL);
+    /* Match the haptic initialization shipped by the FreeWili Meshtastic
+     * port: GPIO46, active high, direct SIO output at 12 mA. */
     gpio_set_dir(PIN_HAPTIC, GPIO_OUT);
     gpio_set_drive_strength(PIN_HAPTIC, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_pull_down(PIN_HAPTIC);
     gpio_put(PIN_HAPTIC, 0u);
 #endif
     fw2_app_about_use_lcd_restore(restore_screen);
     ws2812_init(pio1, 0, PIN_LED_DATA);
-    ws2812_set_brightness(48);
+    ws2812_set_brightness(LED_BRIGHTNESS_NORMAL);
     update_leds();
     show_splash();
     s_ui_mode = UI_STARTUP;
@@ -1962,6 +2677,7 @@ int main(void) {
         uint64_t now = time_us_64();
         haptic_task(now);
         haptic_probe_task(now);
+        recover_bridge_link(now);
         if (now >= next_data_poll) {
             poll_frame();
             next_data_poll = now + 50000u;
