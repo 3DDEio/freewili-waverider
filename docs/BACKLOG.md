@@ -15,11 +15,17 @@ hardware bring-up.
 
 External test beacon recovery (2026-08-11): the XIAO ESP32-C3's persistent
 `code.py` had been replaced by a 22-byte `print("Hello World!")` program. The
-separate recovery package now configures its healthy SA868 for low-power
+separate recovery package initially restored its healthy SA868 for low-power
 147.500 MHz operation and completed one error-free transmit/idle software
-cycle. Confirm over-the-air reception before using it to close WaveRider's
-known-RF validation gates; transmitter firmware remains separate from
-WaveRider.
+cycle. That original state was subsequently proven over the air; transmitter
+firmware remains separate from WaveRider.
+
+Controlled decoy test state (2026-08-12): the separate beacon program was
+read back byte-for-byte before activation, and its SA868 returned success for
+low-power 144.3000 MHz operation. Its current 13 WPM payload is
+`KO6FQY -- DECOY DECOY -- KO6FQY` at an 800 Hz tone with a 30-second
+post-message delay. Use this state for the 144.300 MHz off-frequency/message-
+grouping validation; it no longer transmits the 147.500 MHz domain payload.
 
 Brand migration begins after the connected device demonstrates:
 
