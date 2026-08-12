@@ -1152,15 +1152,28 @@ static void draw_messages(void) {
                  (unsigned)record->confidence_percent);
         fb_draw_text(244, 76, 1, COL_GREEN, COL_PANEL, line);
         fb_fill_rect(26, 108, 420, 1, COL_BORDER);
+        /* The decoded payload is the reason this page exists.  Render it at
+         * the larger glance-readable size and wrap on words when possible.
+         * Five 34-character rows can still hold every byte transported by
+         * MESSAGE_TEXT_BYTES, so readability does not truncate history. */
         int offset = 0;
-        for (int row = 0; row < 7 && record->text[offset] != '\0'; row++) {
-            char text_line[55];
-            int count = 0;
-            while (count < 54 && record->text[offset] != '\0')
-                text_line[count++] = record->text[offset++];
+        for (int row = 0; row < 5 && record->text[offset] != '\0'; row++) {
+            char text_line[35];
+            int remaining = (int)strlen(&record->text[offset]);
+            int count = remaining < 34 ? remaining : 34;
+            if (remaining > 34) {
+                int word_break = count;
+                while (word_break > 0 &&
+                       record->text[offset + word_break] != ' ')
+                    word_break--;
+                if (word_break > 0) count = word_break;
+            }
+            memcpy(text_line, &record->text[offset], (size_t)count);
             text_line[count] = '\0';
-            fb_draw_text(26, 124 + row * 18, 1, COL_TEXT, COL_PANEL,
+            fb_draw_text(26, 118 + row * 25, 2, COL_TEXT, COL_PANEL,
                          text_line);
+            offset += count;
+            while (record->text[offset] == ' ') offset++;
         }
         fb_draw_text(26, 253, 1, COL_DIM, COL_PANEL,
                      "UP/DOWN OR PREV/NEXT STAYS ON THIS FREQUENCY");

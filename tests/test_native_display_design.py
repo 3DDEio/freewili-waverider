@@ -261,6 +261,17 @@ def test_native_morse_history_is_bounded_browsable_and_replay_aware():
     assert "s_ui_mode == UI_MESSAGES" in source
 
 
+def test_native_message_viewer_prioritizes_readable_decoded_text():
+    source = SOURCE.read_text()
+    viewer = source[source.index("static void draw_messages(void) {") :]
+    viewer = viewer[: viewer.index("static void draw_message_clear_confirmation")]
+
+    assert "char text_line[35];" in viewer
+    assert "record->text[offset + word_break] != ' '" in viewer
+    assert "fb_draw_text(26, 118 + row * 25, 2, COL_TEXT" in viewer
+    assert "row < 5" in viewer
+
+
 def test_pocket_alert_live_updates_do_not_clear_or_rebuild_the_full_screen():
     source = SOURCE.read_text()
 
