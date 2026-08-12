@@ -4,7 +4,8 @@
 The command deliberately uses OpenOCD ``load_image`` rather than ``program``:
 the installer itself never touches the stock DISPLAY QSPI firmware.  The
 installer then writes the already safety-checked WaveRider UF2 into Main's
-supported ``/apps/waverider`` SD directory.
+supported ``/apps/Radio`` SD directory. Its embedded metadata labels the menu
+entry ``WaveRider``.
 """
 
 from __future__ import annotations
@@ -269,7 +270,8 @@ def main() -> int:
     subprocess.run(command, cwd=ROOT, check=True)
     print(
         "WaveRider installer is running from volatile SRAM. "
-        "Wait for INSTALL COMPLETE on the device, then hold Home to return."
+        "Wait for INSTALL COMPLETE on the device, then hold Home to return. "
+        "Launch it from Apps > Radio > WaveRider."
     )
     return 0
 

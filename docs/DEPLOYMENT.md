@@ -77,7 +77,7 @@ contains a stock DISPLAY-QSPI payload. The self-installer uses Main's supported
 SDFS service to create:
 
 ```text
-/apps/waverider/waverider_display.uf2
+/apps/Radio/waverider_display.uf2
 ```
 
 Rebuild both artifacts and run the fail-closed checks before touching hardware:
@@ -101,10 +101,10 @@ installer ELF segment outside the documented volatile SRAM/PSRAM windows,
 halts both display cores, quiesces peripheral DMA, uses OpenOCD `load_image`
 plus `verify_image`, and never invokes `program` or a flash-write operation.
 Wait for **INSTALL COMPLETE** on the device, then hold Home for five seconds.
-WaveRider can thereafter be launched from the stock Apps menu or with:
+WaveRider can thereafter be launched from **Apps → Radio → WaveRider** or with:
 
 ```text
-python3 research/wilibsp/tools/fw.py run-app waverider/waverider_display.uf2
+python3 research/wilibsp/tools/fw.py run-app Radio/waverider_display.uf2
 ```
 
 This is currently the maintainer recovery path for Macs on which the USB-muxed

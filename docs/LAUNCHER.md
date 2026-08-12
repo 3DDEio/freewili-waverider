@@ -10,7 +10,7 @@ and reveals live CM0 data without opening an interactive Linux terminal.
 - Service: `/etc/systemd/system/freewili-foxhunt.service`
 - Saved lists and marks: `/var/lib/freewili-foxhunt`
 - Runtime status: `/run/freewili-foxhunt/status.json`
-- Apps-menu image: `/apps/waverider/waverider_display.uf2`
+- Apps-menu image: `/apps/Radio/waverider_display.uf2`
 - Splash and RSSI scale: drawn by the native app; no Main-SD image dependency
 
 The service remains separately maintainable from the CM0 console, but normal
@@ -18,7 +18,8 @@ launch no longer requires the user to open Wi-Li-nux or attach a shell.
 
 ## Required user experience
 
-The finished installation adds **WaveRider** to the stock FreeWili 2 Apps menu.
+The finished installation adds **WaveRider** under **Apps → Radio** in the
+stock FreeWili 2 menu.
 Selecting it must be the only startup action:
 
 1. Show the WaveRider splash immediately.
@@ -48,13 +49,14 @@ never a hidden Linux-terminal session.
 
 ```text
 FreeWili Apps menu
-  -> WaveRider launcher on Main
-     -> power FPGA + CM0
-     -> release CM0 reset
-     -> stock Linux enable
-     -> CM0 systemd starts WaveRider
-     -> readiness/status handshake
-     -> persistent WaveRider Display panel
+  -> Radio
+     -> WaveRider launcher on Main
+        -> power FPGA + CM0
+        -> release CM0 reset
+        -> stock Linux enable
+        -> CM0 systemd starts WaveRider
+        -> readiness/status handshake
+        -> persistent WaveRider Display panel
 ```
 
 ## Safe integration boundary
