@@ -36,6 +36,14 @@ licenses remain in force independently of WaveRider's GPL/CC licensing.
   package version. Public releases must preserve the package copyright files
   and identify the source version.
 
+## Optional Fox Hunt Badge test-beacon source
+
+- Upstream: <https://gitlab.com/bradanlane_cp/foxhunt>
+- License: GPL-3.0-or-later.
+- Use: pin mapping and SA868 control-flow provenance for the optional
+  `test-beacon/` development fixture. The fixture is not part of the WaveRider
+  receiver installation and retains explicit GPL attribution in its source.
+
 ## Generated and compiled files
 
 Prebuilt WaveRider UF2/ELF files correspond to the source in the tagged

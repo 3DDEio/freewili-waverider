@@ -403,9 +403,11 @@ Brand migration begins after the connected device demonstrates:
      the correct 147.500 MHz frequency.
   3. Disabling CW stops new candidate/verified records without interrupting the
      SDR; re-enabling starts with clean pending timing state and resumes.
-  4. An equal-duration 144.300 MHz control run produces zero verified messages
-     and zero fabricated callsigns. Rejected candidates are acceptable only
-     when diagnostics show that they remained below the quality gate.
+  4. An equal-duration beacon-off or receiver-tuned-away control run produces
+     zero verified messages and zero fabricated callsigns. Rejected candidates
+     are acceptable only when diagnostics show that they remained below the
+     quality gate. The former 144.300 MHz quiet-control slot is now an
+     intentional decoy-beacon channel and no longer qualifies as silence.
   5. The message viewer can recall the observation by frequency and Clear
      removes both verified and candidate history.
   If any criterion fails, retain the raw candidates, tone estimate, timing/WPM,
@@ -500,8 +502,17 @@ Brand migration begins after the connected device demonstrates:
   decoded message from the MSGS viewer is now confirmed; its payload text has
   been enlarged and word-wrapped for field readability without reducing the
   79-character transport limit. Keep this gate open until ten complete live
-  transmissions, the 144.300 MHz control duration, and physical MSGS
+  transmissions, the beacon-off/tuned-away control duration, and physical MSGS
   grouping/Clear checks are complete.
+
+  **2026-08-12 two-frequency field acceptance:** the separate beacon was moved
+  to 144.300 MHz and changed to the distinct known payload
+  `KO6FQY -- DECOY DECOY -- KO6FQY`. WaveRider passed its consensus gate and
+  displayed that second payload with 100 percent character accuracy. Together
+  with the exact 147.500 MHz domain payload, this physically proves clean CW
+  parsing for two messages and two frequency labels without conflating their
+  text. It does not replace the required beacon-off false-positive duration or
+  the ten-transmission efficacy sample.
 
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
@@ -523,16 +534,17 @@ Brand migration begins after the connected device demonstrates:
   tolerated, inconsistent callsigns and unmodulated carriers are rejected, and
   non-800 Hz tone acquisition and sub-dot dropout repair pass, and the full
   host suite covers grouped navigation plus cache/persistence clearing.
-  Partial KO6FQY/domain text has now been observed over air; confirm repeatable
-  recovery of `KO6FQY JOIN NORCALCYBER.IO! KO6FQY` at 147.500 MHz before
-  calling this field-proven. A later live inspection found 21 hidden candidates
+  Exact verified KO6FQY messages have now been displayed over air at 147.500
+  and 144.300 MHz with two distinct known payloads. A later live inspection
+  found 21 hidden candidates
   but zero verified messages and exposed the timing model at 205.9 ms (about
   5.8 WPM): rejected noise was still retraining the persistent speed estimate.
   The deployed correction bounds acquisition to 8--30 WPM and updates learned
   timing only after a candidate passes every quality gate. The regression and
   full 176-test suite pass; after service restart the connected decoder returned
   to 92.3 ms / 13 WPM at exactly 147.500 MHz. Fresh over-air candidate and
-  consensus validation remains open.
+  consensus validation was subsequently proven; the larger efficacy sample,
+  quiet control, and message-management observations remain open.
 - Close-in attenuation/gain workflow for near-field hunting.
 - Calibrated color legend tied to the frozen relative dBFS waterfall scale.
 - Compass-assisted heading sweep and saved hunt observations.
