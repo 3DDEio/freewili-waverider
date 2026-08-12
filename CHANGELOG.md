@@ -14,6 +14,8 @@ All notable public changes to WaveRider are recorded here. The format follows
   byte-for-byte verified deployment path.
 - Git-clone installation quick start, repository map, and browsable
   documentation index.
+- A six-position Waterfall Span slider in Settings covering the documented
+  25 kHz through 2 MHz profiles with per-frequency persistence.
 
 ### Changed
 

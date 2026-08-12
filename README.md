@@ -72,7 +72,8 @@ the [User guide](docs/USER_GUIDE.md) for normal operation, and the
 - Low-latency native IQ capture targeting 10 analyses per second, with
   complete 100 ms reads and latest-only buffering so the field display cannot
   accumulate stale motion.
-- Configurable 25 kHz to 2 MHz visible spans.
+- A Settings slider with 25 kHz, 100 kHz, 200 kHz, 500 kHz, 1 MHz, and 2 MHz
+  visible spans. Each frequency remembers its selected span.
 - A loadable native Display app that reads FreeWili's supported `uartkbd`
   hardware queue directly, bypassing the broken v07 CM0 button relay.
 - A compact Main app-signal mailbox carrying button commands, active frequency,
@@ -86,7 +87,8 @@ the [User guide](docs/USER_GUIDE.md) for normal operation, and the
   Its Display GPIO35 active-high, 12 mA driver and 150/80 ms timing are
   physically verified on production FW2 v07 unit FX0177. Other board revisions
   should run the manual Test before relying on Pocket Alert.
-- A Page-key **Settings** hub for Audio Monitor, Pocket Alert, and CW Decoder.
+- A Page-key **Settings** hub for Audio Monitor, Waterfall Span, Pocket Alert,
+  and CW Decoder.
   Pocket Alert and the persistent CW toggle are functional; Audio exposes its
   future monitor/volume controls as locked until the safe PCM transport exists.
 - Plain-language startup, refresh, and receiver-fault status pages.
@@ -231,8 +233,9 @@ live, the installer restores maintenance mode and the serial console returns.
   status, and repaint the waterfall after a new row arrives.
 - D-pad Up/Down/Left/Right: browse and immediately tune list entries on the live
   screen. Check applies the highlighted entry.
-- Page (or a tap on the RSSI scale) — **Settings:** open Audio Monitor, Pocket
-  Alert, or CW Decoder. Up/Down selects; Check opens; Page returns.
+- Page (or a tap on the RSSI scale) — **Settings:** open Audio Monitor,
+  Waterfall Span, Pocket Alert, or CW Decoder. Up/Down selects; Check opens;
+  Page returns.
 
 Pocket Alert is source-verified but still beta hardware functionality. Confirm
 the manual Test on your FreeWili revision before relying on eyes-free alerts.

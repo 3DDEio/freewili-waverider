@@ -115,6 +115,7 @@ static int s_active;
 static int s_cursor;
 static uint32_t s_frequency = 147495000u;
 static uint32_t s_span = 100000u;
+static uint32_t s_requested_span;
 static int32_t s_rssi_tenths = -900;
 static int32_t s_peak_tenths_khz;
 static uint32_t s_row_seq = UINT32_MAX;
@@ -135,6 +136,7 @@ typedef enum {
     UI_DELETE_CONFIRM,
     UI_SETTINGS,
     UI_AUDIO,
+    UI_WATERFALL_SPAN,
     UI_CW_DECODER,
     UI_MESSAGE_FREQUENCIES,
     UI_MESSAGES,
@@ -208,6 +210,7 @@ static void enter_live_view(bool clear_plot);
 static void draw_library(void);
 static void draw_settings(void);
 static void draw_audio_page(void);
+static void draw_waterfall_span(void);
 static void draw_cw_decoder(void);
 static void draw_pocket_alert(void);
 static void draw_pocket_alert_dynamic(void);
@@ -223,6 +226,10 @@ static bool apply_main_power_zone(uint8_t zone, bool on,
 static const uint32_t s_digit_places_khz[] = {
     1000000u, 100000u, 10000u, 1000u, 100u, 10u, 1u,
 };
+static const uint32_t s_span_profiles_hz[] = {
+    25000u, 100000u, 200000u, 500000u, 1000000u, 2000000u,
+};
+#define SPAN_PROFILE_COUNT 6u
 
 static uint16_t rgb565_be(uint8_t r, uint8_t g, uint8_t b) {
     return RGB565_BE(r, g, b);
@@ -912,16 +919,113 @@ static void draw_audio_page(void) {
     s_fb_dirty = true;
 }
 
+static uint8_t span_profile_index(void) {
+    uint32_t active_span = s_requested_span != 0u ? s_requested_span : s_span;
+    uint8_t nearest = 0u;
+    uint32_t nearest_delta = UINT32_MAX;
+    for (uint8_t index = 0u; index < SPAN_PROFILE_COUNT; index++) {
+        if (s_span_profiles_hz[index] == active_span) return index;
+        uint32_t value = s_span_profiles_hz[index];
+        uint32_t delta = value > active_span ? value - active_span
+                                             : active_span - value;
+        if (delta < nearest_delta) {
+            nearest = index;
+            nearest_delta = delta;
+        }
+    }
+    return nearest;
+}
+
+static void format_span_label(char *out, size_t cap, uint32_t span_hz) {
+    if (span_hz >= 1000000u)
+        snprintf(out, cap, "%lu MHz", (unsigned long)(span_hz / 1000000u));
+    else
+        snprintf(out, cap, "%lu kHz", (unsigned long)(span_hz / 1000u));
+}
+
+static void draw_waterfall_span(void) {
+    static const char *labels[SPAN_PROFILE_COUNT] = {
+        "25K", "100K", "200K", "500K", "1M", "2M",
+    };
+    const int track_x = 52;
+    const int track_y = 151;
+    const int track_step = 75;
+    uint8_t selected = span_profile_index();
+    int marker_x = track_x + selected * track_step;
+    char value[24];
+
+    format_span_label(value, sizeof value, s_span_profiles_hz[selected]);
+    int value_width = (int)strlen(value) * 18;
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+    fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
+    fb_draw_text(294, 5, 2, COL_BLUE, COL_BG, "WATERFALL SPAN");
+    fb_fill_rect(20, 48, 440, 208, COL_PANEL);
+    fb_draw_text(42, 63, 1, COL_DIM, COL_PANEL, "VISIBLE RECEIVER BANDWIDTH");
+    fb_draw_text(240 - value_width / 2, 82, 3, COL_WHITE, COL_PANEL, value);
+
+    for (int x = track_x; x <= track_x + 5 * track_step; x++) {
+        int relative = x - track_x;
+        uint16_t color = rssi_color(relative * (SCALE_W - 1) /
+                                    (5 * track_step));
+        fb_fill_rect(x, track_y, 1, 6, color);
+    }
+    for (uint8_t index = 0u; index < SPAN_PROFILE_COUNT; index++) {
+        int x = track_x + index * track_step;
+        uint16_t tick = index == selected ? COL_WHITE : COL_BORDER;
+        fb_fill_rect(x - 2, track_y - 6, 5, 18, tick);
+        int label_width = (int)strlen(labels[index]) * 6;
+        fb_draw_text(x - label_width / 2, 169, 1,
+                     index == selected ? COL_WHITE : COL_DIM,
+                     COL_PANEL, labels[index]);
+    }
+    fb_fill_triangle(marker_x, track_y - 16, marker_x - 7, track_y - 25,
+                     marker_x + 7, track_y - 25, COL_WHITE);
+    fb_draw_text(50, 202, 1, COL_BLUE, COL_PANEL,
+                 "NARROW = MORE DETAIL    WIDE = MORE CONTEXT");
+    fb_draw_text(72, 226, 1, COL_DIM, COL_PANEL,
+                 "LEFT/RIGHT RETUNES AND SAVES THIS FREQUENCY");
+    draw_button(0, "BACK", COL_TEXT);
+    draw_button(1, "NARROW", COL_YELLOW);
+    draw_button(2, "DONE", COL_GREEN);
+    draw_button(3, "WIDER", COL_BLUE);
+    draw_button(4, "LIVE", COL_RED);
+    s_fb_dirty = true;
+}
+
+static void set_span_profile(uint8_t index) {
+    if (index >= SPAN_PROFILE_COUNT) return;
+    uint32_t requested = s_span_profiles_hz[index];
+    uint32_t current = s_requested_span != 0u ? s_requested_span : s_span;
+    if (requested == current) {
+        draw_waterfall_span();
+        return;
+    }
+    s_requested_span = requested;
+    /* Opcode zero reserves arguments 4-9 for the six documented spans. */
+    send_command(0u, (uint8_t)(4u + index));
+    draw_waterfall_span();
+}
+
+static void adjust_span_profile(int delta) {
+    int index = (int)span_profile_index() + delta;
+    if (index < 0) index = 0;
+    if (index >= (int)SPAN_PROFILE_COUNT) index = SPAN_PROFILE_COUNT - 1;
+    if ((uint8_t)index != span_profile_index())
+        set_span_profile((uint8_t)index);
+    else
+        draw_waterfall_span();
+}
+
 static void draw_setting_row(int row, const char *title, const char *detail,
                              uint16_t accent) {
-    int y = 50 + row * 70;
+    int y = 43 + row * 53;
     uint16_t background = row == (int)s_settings_cursor ? COL_SELECT : COL_PANEL;
-    fb_fill_rect(24, y, 432, 58, background);
-    fb_fill_rect(24, y, 4, 58, accent);
-    fb_draw_text(42, y + 8, 2, COL_TEXT, background, title);
-    fb_draw_text(42, y + 34, 1, accent, background, detail);
+    fb_fill_rect(24, y, 432, 46, background);
+    fb_fill_rect(24, y, 4, 46, accent);
+    fb_draw_text(42, y + 4, 2, COL_TEXT, background, title);
+    fb_draw_text(42, y + 28, 1, accent, background, detail);
     if (row == (int)s_settings_cursor)
-        fb_draw_text(430, y + 20, 2, COL_WHITE, background, ">");
+        fb_draw_text(430, y + 14, 2, COL_WHITE, background, ">");
 }
 
 static void draw_settings(void) {
@@ -931,16 +1035,21 @@ static void draw_settings(void) {
     fb_draw_text(350, 5, 2, COL_GREEN, COL_BG, "SETTINGS");
     draw_setting_row(0, "AUDIO MONITOR",
                      "LOCKED - PCM BRIDGE REQUIRED", COL_YELLOW);
+    format_span_label(detail, sizeof detail,
+                      s_requested_span != 0u ? s_requested_span : s_span);
+    char span_detail[48];
+    snprintf(span_detail, sizeof span_detail, "VISIBLE WIDTH %s", detail);
+    draw_setting_row(1, "WATERFALL SPAN", span_detail, COL_BLUE);
     snprintf(detail, sizeof detail, "%s  THRESHOLD %ld dBFS",
              s_alert_enabled ? "ON " : "OFF",
              (long)(s_alert_threshold_tenths / 10));
-    draw_setting_row(1, "POCKET ALERT", detail,
+    draw_setting_row(2, "POCKET ALERT", detail,
                      s_alert_enabled ? COL_GREEN : COL_DIM);
     snprintf(detail, sizeof detail, "%s  AUTO TONE 450-1150 HZ",
              s_cw_enabled ? "ON " : "OFF");
-    draw_setting_row(2, "CW DECODER", detail,
+    draw_setting_row(3, "CW DECODER", detail,
                      s_cw_enabled ? COL_BLUE : COL_DIM);
-    fb_draw_text(24, 266, 1, COL_DIM, COL_BG,
+    fb_draw_text(24, 264, 1, COL_DIM, COL_BG,
                  "UP/DOWN SELECT   CHECK OPEN   PAGE BACK");
     draw_button(0, "BACK", COL_TEXT);
     draw_button(1, "PREV", COL_YELLOW);
@@ -955,6 +1064,9 @@ static void open_selected_setting(void) {
         s_ui_mode = UI_AUDIO;
         draw_audio_page();
     } else if (s_settings_cursor == 1u) {
+        s_ui_mode = UI_WATERFALL_SPAN;
+        draw_waterfall_span();
+    } else if (s_settings_cursor == 2u) {
         s_ui_mode = UI_POCKET_ALERT;
         draw_pocket_alert();
     } else {
@@ -964,7 +1076,7 @@ static void open_selected_setting(void) {
 }
 
 static void move_settings_cursor(int delta) {
-    s_settings_cursor = (uint8_t)((s_settings_cursor + 3 + delta) % 3);
+    s_settings_cursor = (uint8_t)((s_settings_cursor + 4 + delta) % 4);
     draw_settings();
 }
 
@@ -1719,7 +1831,7 @@ static void update_leds(void) {
     if (s_ui_mode == UI_LISTS_LOADING || s_ui_mode == UI_LISTS ||
         s_ui_mode == UI_DELETE_CONFIRM || s_ui_mode == UI_ADD_FREQUENCY ||
         s_ui_mode == UI_SETTINGS || s_ui_mode == UI_AUDIO ||
-        s_ui_mode == UI_CW_DECODER) {
+        s_ui_mode == UI_WATERFALL_SPAN || s_ui_mode == UI_CW_DECODER) {
         for (int i = 0; i < 7; i++)
             ws2812_set_pixel((uint)i, (rgb_t){.r = 0, .g = 70, .b = 110});
         ws2812_show();
@@ -1904,6 +2016,8 @@ static void poll_list(void) {
             draw_settings();
         else if (s_ui_mode == UI_AUDIO)
             draw_audio_page();
+        else if (s_ui_mode == UI_WATERFALL_SPAN)
+            draw_waterfall_span();
         else if (s_ui_mode == UI_CW_DECODER)
             draw_cw_decoder();
         else if (s_ui_mode == UI_POCKET_ALERT)
@@ -1956,6 +2070,7 @@ static void poll_frame(void) {
 
     s_frequency = frequency;
     s_span = span;
+    if (s_requested_span == span) s_requested_span = 0u;
     s_rssi_tenths = round_i32(rssi * 10.0);
     s_peak_tenths_khz = round_i32(peak / 100.0);
     s_last_row_us = time_us_64();
@@ -2267,6 +2382,35 @@ static void handle_buttons(void) {
             }
             continue;
         }
+        if (s_ui_mode == UI_WATERFALL_SPAN) {
+            switch (event.btn) {
+            case UARTKBD_BTN_NAV_LEFT:
+            case UARTKBD_BTN_NAV_DOWN:
+            case UARTKBD_BTN_YELLOW:
+                adjust_span_profile(-1);
+                break;
+            case UARTKBD_BTN_NAV_RIGHT:
+            case UARTKBD_BTN_NAV_UP:
+            case UARTKBD_BTN_BLUE:
+                adjust_span_profile(1);
+                break;
+            case UARTKBD_BTN_RED:
+                enter_live_view(false);
+                break;
+            case UARTKBD_BTN_NAV_CENTER:
+            case UARTKBD_BTN_OK:
+            case UARTKBD_BTN_GREEN:
+            case UARTKBD_BTN_CANCEL:
+            case UARTKBD_BTN_GREY:
+            case UARTKBD_BTN_PAGE:
+                s_ui_mode = UI_SETTINGS;
+                draw_settings();
+                break;
+            default:
+                break;
+            }
+            continue;
+        }
         if (s_ui_mode == UI_CW_DECODER) {
             if (event.btn == UARTKBD_BTN_RED)
                 enter_live_view(false);
@@ -2488,9 +2632,9 @@ static void handle_touch(void) {
                 draw_library();
             }
         } else if (s_ui_mode == UI_SETTINGS) {
-            if (y >= 50u && y < 248u && x >= 24u && x < 456u) {
-                int row = (int)(y - 50u) / 70;
-                if (row >= 0 && row < 3) {
+            if (y >= 43u && y < 249u && x >= 24u && x < 456u) {
+                int row = (int)(y - 43u) / 53;
+                if (row >= 0 && row < 4) {
                     s_settings_cursor = (uint8_t)row;
                     draw_settings();
                 }
@@ -2500,6 +2644,26 @@ static void handle_touch(void) {
                 else if (button == 1) move_settings_cursor(-1);
                 else if (button == 2) open_selected_setting();
                 else if (button == 3) move_settings_cursor(1);
+            }
+        } else if (s_ui_mode == UI_WATERFALL_SPAN) {
+            if (y >= 120u && y < 190u && x >= 40u && x <= 440u) {
+                int index = ((int)x - 52 + 37) / 75;
+                if (index < 0) index = 0;
+                if (index >= (int)SPAN_PROFILE_COUNT)
+                    index = SPAN_PROFILE_COUNT - 1;
+                set_span_profile((uint8_t)index);
+            } else if (y >= 286u) {
+                int button = (int)(x / 96u);
+                if (button == 0 || button == 2) {
+                    s_ui_mode = UI_SETTINGS;
+                    draw_settings();
+                } else if (button == 1) {
+                    adjust_span_profile(-1);
+                } else if (button == 3) {
+                    adjust_span_profile(1);
+                } else if (button == 4) {
+                    enter_live_view(false);
+                }
             }
         } else if (s_ui_mode == UI_HAPTIC_PROBE) {
             if (y >= 286u) {

@@ -611,6 +611,13 @@ class FoxhuntApp:
                 "enabled" if self.decoder_settings.cw_enabled else "disabled",
             )
             return
+        if action.startswith("span:"):
+            try:
+                span_hz = int(action.split(":", 1)[1])
+            except ValueError:
+                return
+            self._set_waterfall_span(span_hz)
+            return
         if action.startswith("alert_enabled:"):
             self.alert_settings.enabled = action.endswith(":1")
             self._save_alert_settings()
@@ -687,6 +694,35 @@ class FoxhuntApp:
         # echo the setting back: that long mailbox transaction competes with
         # live rows and can leave the command/status UI stale. The persisted
         # value is included in the next ordinary build or service reconnect.
+
+    def _set_waterfall_span(self, span_hz: int) -> None:
+        """Persist and immediately apply a supported visible receiver span."""
+        if span_hz not in ALLOWED_SPANS_HZ:
+            LOG.warning("ignored unsupported waterfall span: %s Hz", span_hz)
+            return
+        if self.entry.span_hz == span_hz:
+            return
+
+        active_frequency_hz = self.entry.frequency_hz
+        self.entry.span_hz = span_hz
+        self.entry.validate()
+        for saved in self.saved_frequencies:
+            if saved.frequency_hz == active_frequency_hz:
+                saved.span_hz = span_hz
+
+        # Settings changes are durable immediately; users should not need to
+        # visit the legacy editor's Save action after moving the slider.
+        self.store.save(self.frequency_list)
+        self._save_library()
+        if not self.capture_paused:
+            self.sdr.start(self.entry)
+        self.waterfall_scale.reset()
+        self.dirty = False
+        LOG.info(
+            "waterfall span set to %s Hz for %.3f MHz",
+            span_hz,
+            active_frequency_hz / 1_000_000,
+        )
 
     def _add_saved_frequency(self, frequency_hz: int) -> None:
         if len(self.saved_frequencies) >= 100:

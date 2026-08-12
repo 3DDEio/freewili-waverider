@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import FrequencyEntry, FrequencyList
+from .models import ALLOWED_SPANS_HZ, FrequencyEntry, FrequencyList
 
 
 LOG = logging.getLogger(__name__)
@@ -1150,6 +1150,8 @@ class NativeSignalDisplay:
             return "messages_clear"
         if opcode == 0 and argument in (2, 3):
             return f"decoder_enabled:{1 if argument == 3 else 0}"
+        if opcode == 0 and 4 <= argument < 4 + len(ALLOWED_SPANS_HZ):
+            return f"span:{ALLOWED_SPANS_HZ[argument - 4]}"
         if opcode == 6:
             return f"select:{argument}"
         if opcode == 1:

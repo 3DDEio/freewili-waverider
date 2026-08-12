@@ -49,6 +49,12 @@ the receiver. Opening Settings never pauses SDR collection.
 - **Audio Monitor** shows the planned live-monitor and volume controls. They
   remain locked and the receiver remains muted until the safe high-rate PCM
   path to the speaker and headphone jack is implemented.
+- **Waterfall Span** opens a six-position slider: 25 kHz, 100 kHz, 200 kHz,
+  500 kHz, 1 MHz, or 2 MHz. Tap a position or use Left/Right and the colored
+  Narrow/Wider buttons. WaveRider immediately retunes the SDR, clears the old
+  waterfall scale, and saves the selected span with the active frequency.
+  Narrow spans show finer nearby detail; wider spans show more surrounding
+  spectrum.
 - **Pocket Alert** controls vibration enablement, threshold, and the manual
   three-pulse Test.
 - **CW Decoder** enables or disables new Morse processing. Disabling it does
