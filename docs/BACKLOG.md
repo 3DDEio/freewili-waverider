@@ -295,6 +295,24 @@ Brand migration begins after the connected device demonstrates:
   connected device. Physical Page-key navigation and persistence QA remain
   open.
 
+- [ ] **NEXT FIELD GATE A — Validate Pocket Alert end to end.** Use the known
+  147.500 MHz KO6FQY beacon and record the quiet noise floor before choosing a
+  threshold between the off-air and keyed-signal readings. A passing result
+  requires all of the following on a fresh WaveRider launch:
+  1. Manual Test produces exactly three clearly felt pulses without stopping
+     the waterfall, SDR data, controls, or CM0 bridge.
+  2. Beacon-off operation produces no automatic alert; the first below-to-above
+     threshold crossing produces exactly three pulses.
+  3. A continuously strong signal does not retrigger during or after the
+     30-second cooldown. The signal must fall at least 3 dB through the re-arm
+     boundary and then rise through the threshold again before a second alert.
+  4. That second qualified crossing produces exactly one three-pulse alert.
+  5. Enabled state and threshold survive leaving Settings and a fresh app
+     launch. Disable suppresses alerts immediately.
+  Record measured off/on RSSI, chosen threshold, pulse counts, elapsed times,
+  and any SDR/bridge interruption. Do not mark Pocket Alert complete from the
+  already-proven manual GPIO35 pulse alone.
+
 - [ ] Add opt-in Pocket Alert vibration for eyes-free hunting. The design uses
   three nonblocking 150 ms pulses separated by 80 ms gaps, a fixed 30-second
   cooldown, and a 3 dB fall-and-rise re-arm
@@ -343,6 +361,28 @@ Brand migration begins after the connected device demonstrates:
   settings. Audio must default muted, respect the 0.5 W speaker limit, use the BSP
   speaker safety cap and low-power mute state, and shed audio frames instead of
   slowing RSSI, waterfall, controls, or recovery.
+- [ ] **NEXT FIELD GATE B — Measure CW message efficacy and false positives.**
+  Clear message/candidate history, enable CW, tune 147.500 MHz, and capture at
+  least 10 complete transmissions of the known ground truth
+  `KO6FQY JOIN NORCALCYBER.IO! KO6FQY`. Save raw decoder diagnostics rather
+  than judging only the popup. A passing result requires:
+  1. Both bookend callsigns decode exactly in every user-visible verified
+     message; payload character accuracy is at least 95 percent across the
+     session and the domain is not replaced by a fabricated callsign.
+  2. At least one verified/coalesced history record is produced after the
+     required consensus, remains reviewable after the popup closes, and shows
+     the correct 147.500 MHz frequency.
+  3. Disabling CW stops new candidate/verified records without interrupting the
+     SDR; re-enabling starts with clean pending timing state and resumes.
+  4. An equal-duration 144.300 MHz control run produces zero verified messages
+     and zero fabricated callsigns. Rejected candidates are acceptable only
+     when diagnostics show that they remained below the quality gate.
+  5. The message viewer can recall the observation by frequency and Clear
+     removes both verified and candidate history.
+  If any criterion fails, retain the raw candidates, tone estimate, timing/WPM,
+  confidence components, rejection reason, and signal/noise measurements for
+  the next decoder iteration. Do not tune thresholds from popup text alone.
+
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
   windows, adapts
