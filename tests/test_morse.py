@@ -124,6 +124,38 @@ def test_timing_decoder_rejects_disagreeing_bookend_callsigns() -> None:
     assert decoder.feed(False, 1.1) == []
 
 
+def test_timing_decoder_holds_message_open_while_carrier_remains_keyed() -> None:
+    decoder = MorseTimingDecoder(initial_wpm=13)
+    unit = 1.2 / 13
+    for character_index, character in enumerate("KO6FQY"):
+        for mark in TEXT_TO_MORSE[character]:
+            decoder.feed(True, unit if mark == "." else unit * 3)
+            decoder.feed(False, unit, carrier_active=True)
+        if character_index != 5:
+            decoder.feed(False, unit * 2, carrier_active=True)
+
+    # A false 1.3-second audio dropout must not split a still-keyed carrier.
+    assert decoder.feed(False, 1.3, carrier_active=True) == []
+    messages = decoder.feed(False, 0.1, carrier_active=False)
+
+    assert [message.text for message in messages] == ["KO6FQY"]
+
+
+def test_timing_decoder_bounded_fallback_closes_stuck_carrier() -> None:
+    decoder = MorseTimingDecoder(initial_wpm=13)
+    unit = 1.2 / 13
+    for character_index, character in enumerate("KO6FQY"):
+        for mark in TEXT_TO_MORSE[character]:
+            decoder.feed(True, unit if mark == "." else unit * 3)
+            decoder.feed(False, unit, carrier_active=True)
+        if character_index != 5:
+            decoder.feed(False, unit * 2, carrier_active=True)
+
+    messages = decoder.feed(False, 5.1, carrier_active=True)
+
+    assert [message.text for message in messages] == ["KO6FQY"]
+
+
 def test_timing_decoder_repairs_short_dropout_inside_dash() -> None:
     decoder = MorseTimingDecoder(initial_wpm=20)
     unit = 1.2 / 20
@@ -290,6 +322,11 @@ def test_nfm_preserves_three_window_field_gaps_across_complete_payload() -> None
     windows(False, 55)
 
     assert [message.text for message in messages] == [text]
+    assert decoder.timing.attempt_count == 1
+    assert decoder.timing.last_attempt_raw_duration_ms is not None
+    assert 32_000 <= decoder.timing.last_attempt_raw_duration_ms <= 34_000
+    assert decoder.timing.last_attempt_raw_mark_count > 108
+    assert decoder.timing.last_attempt_raw_gap_count > 107
     assert decoder.timing.last_attempt_mark_count == 108
     assert decoder.timing.last_attempt_gap_count == 107
     assert decoder.timing.last_attempt_unit_ms is not None
@@ -375,6 +412,8 @@ def test_nfm_decoder_recovers_morse_from_offset_tuned_iq() -> None:
         )
 
     assert [message.text for message in messages] == ["KO6FQY"]
+    assert decoder._audio_rate_hz >= 15_000.0
+    assert decoder._audio_rate_hz <= 16_100.0
 
 
 def test_nfm_decoder_locks_to_beacon_tone_that_is_not_800_hz() -> None:

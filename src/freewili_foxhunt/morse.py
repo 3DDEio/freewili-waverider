@@ -89,6 +89,13 @@ class MorseTimingDecoder:
         self.last_attempt_signal_confidence: float | None = None
         self.last_attempt_known_confidence: float | None = None
         self.last_attempt_rejection: str | None = None
+        self.attempt_count = 0
+        self.last_attempt_raw_duration_ms: int | None = None
+        self.last_attempt_duration_ms: int | None = None
+        self.last_attempt_raw_mark_count = 0
+        self.last_attempt_raw_gap_count = 0
+        self.last_attempt_raw_mark_range_ms: tuple[int, int, int] | None = None
+        self.last_attempt_raw_gap_range_ms: tuple[int, int, int] | None = None
         self.last_attempt_mark_count = 0
         self.last_attempt_gap_count = 0
         self.last_attempt_mark_range_ms: tuple[int, int, int] | None = None
@@ -226,9 +233,17 @@ class MorseTimingDecoder:
     def _finish_message(self) -> DecodedMessage | None:
         if not self._marks:
             return None
+        self.attempt_count += 1
         unit, _ = self._estimate_unit()
         unit = max(self.unit_seconds * 0.60, min(self.unit_seconds * 1.40, unit))
         unit = max(self.MIN_UNIT_SECONDS, min(self.MAX_UNIT_SECONDS, unit))
+        self.last_attempt_raw_mark_count = len(self._marks)
+        self.last_attempt_raw_gap_count = len(self._gaps)
+        self.last_attempt_raw_mark_range_ms = self._duration_summary_ms(self._marks)
+        self.last_attempt_raw_gap_range_ms = self._duration_summary_ms(self._gaps)
+        self.last_attempt_raw_duration_ms = round(
+            (sum(self._marks) + sum(self._gaps)) * 1000.0
+        )
         marks, gaps = self._clean_runs(unit)
         unit, fit_confidence = self._estimate_unit(marks, gaps)
         unit = max(self.unit_seconds * 0.60, min(self.unit_seconds * 1.40, unit))
@@ -237,6 +252,7 @@ class MorseTimingDecoder:
         self.last_attempt_gap_count = len(gaps)
         self.last_attempt_mark_range_ms = self._duration_summary_ms(marks)
         self.last_attempt_gap_range_ms = self._duration_summary_ms(gaps)
+        self.last_attempt_duration_ms = round((sum(marks) + sum(gaps)) * 1000.0)
         self.last_attempt_unit_ms = unit * 1000.0
         characters: list[str] = []
         symbols: list[str] = []
@@ -348,6 +364,7 @@ class MorseTimingDecoder:
         tone: bool,
         duration_seconds: float,
         evidence: float = 1.0,
+        carrier_active: bool | None = None,
     ) -> list[DecodedMessage]:
         if duration_seconds <= 0.0:
             return []
@@ -368,7 +385,12 @@ class MorseTimingDecoder:
             self._signal_evidence.append(max(0.0, min(1.0, evidence)))
 
         if not self.tone:
-            if self._marks and self.elapsed >= max(1.0, self.unit_seconds * 10.0):
+            ordinary_timeout = max(1.0, self.unit_seconds * 10.0)
+            fallback_timeout = max(5.0, self.unit_seconds * 40.0)
+            should_finish = self.elapsed >= fallback_timeout or (
+                carrier_active is not True and self.elapsed >= ordinary_timeout
+            )
+            if self._marks and should_finish:
                 message = self._finish_message()
                 if message is not None:
                     messages.append(message)
@@ -385,6 +407,9 @@ class NfmMorseDecoder:
     speeds around its 13 WPM starting point.
     """
 
+    # Preserve enough samples per 800 Hz tone cycle for stable 20 ms Goertzel
+    # edges. Continuous SDR reads now run in their own thread, so this
+    # higher-fidelity rate no longer pauses USB collection between blocks.
     AUDIO_RATE_HZ = 16_000
     WINDOW_SECONDS = 0.020
     ATTACK_WINDOWS = 2
@@ -504,7 +529,10 @@ class NfmMorseDecoder:
         return self._window_tone_evidence(values)[0]
 
     def _feed_tone_window(
-        self, raw_tone: bool, evidence: float = 1.0
+        self,
+        raw_tone: bool,
+        evidence: float = 1.0,
+        carrier_active: bool | None = None,
     ) -> list[DecodedMessage]:
         if raw_tone == self._stable_tone:
             # A provisional opposite state that vanishes before its debounce
@@ -522,6 +550,7 @@ class NfmMorseDecoder:
                 self._stable_tone,
                 duration,
                 evidence=evidence if self._stable_tone else 1.0,
+                carrier_active=carrier_active,
             )
 
         if raw_tone == self._candidate:
@@ -559,6 +588,7 @@ class NfmMorseDecoder:
             self._stable_tone,
             duration,
             evidence=candidate_evidence if self._stable_tone else 1.0,
+            carrier_active=carrier_active,
         )
 
     def feed_iq(
@@ -567,6 +597,7 @@ class NfmMorseDecoder:
         sample_rate_hz: int,
         tuner_center_hz: int,
         target_center_hz: int,
+        carrier_active: bool | None = None,
     ) -> list[DecodedMessage]:
         self._configure(sample_rate_hz, tuner_center_hz, target_center_hz)
         sample_count = len(data) // 2
@@ -597,5 +628,7 @@ class NfmMorseDecoder:
             window = self._audio[: self._window_samples]
             del self._audio[: self._window_samples]
             tone, evidence = self._window_tone_evidence(window)
-            messages.extend(self._feed_tone_window(tone, evidence))
+            messages.extend(
+                self._feed_tone_window(tone, evidence, carrier_active=carrier_active)
+            )
         return messages

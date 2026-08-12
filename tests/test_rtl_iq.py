@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import math
+import queue
+import threading
 import unittest
 from types import SimpleNamespace
 
-from freewili_foxhunt.rtl_iq import FFT_SIZE, RtlIqStream, analyze_iq
+from freewili_foxhunt.rtl_iq import (
+    FFT_SIZE,
+    RtlIqStream,
+    analyze_iq,
+    carrier_margin_db,
+)
 
 
 class RtlIqTests(unittest.TestCase):
@@ -29,6 +36,39 @@ class RtlIqTests(unittest.TestCase):
         self.assertEqual(RtlIqStream.sample_rate_for(200_000), 240_000)
         self.assertEqual(RtlIqStream.sample_rate_for(500_000), 1_024_000)
         self.assertEqual(RtlIqStream.sample_rate_for(2_000_000), 2_400_000)
+
+    def test_realtime_ratio_compares_processed_iq_to_wall_time(self) -> None:
+        stream = object.__new__(RtlIqStream)
+        stream.capture_started_monotonic = __import__("time").monotonic() - 2.0
+        stream.processed_iq_seconds = 1.0
+
+        self.assertAlmostEqual(stream.realtime_ratio, 0.5, delta=0.02)
+
+    def test_processor_accounts_for_each_queued_iq_block(self) -> None:
+        stream = object.__new__(RtlIqStream)
+        stream.entry = SimpleNamespace(frequency_hz=147_500_000, span_hz=200_000)
+        stream.tuner_center_hz = 147_550_000
+        stream.sample_rate_hz = 240_000
+        stream.stop_event = threading.Event()
+        stream.stop_event.set()
+        stream.iq_blocks = queue.Queue(maxsize=4)
+        stream.iq_blocks.put_nowait(bytes([128, 128]) * (FFT_SIZE * 8))
+        stream.rows = queue.Queue(maxsize=2)
+        stream.messages = queue.Queue(maxsize=4)
+        stream.cw_enabled = False
+        stream.processed_iq_seconds = 0.0
+        stream.last_processing_ms = 0.0
+        stream.carrier_active = False
+        stream.carrier_margin_db = 0.0
+        stream._carrier_release_blocks = 0
+
+        stream._process_loop()
+
+        self.assertAlmostEqual(
+            stream.processed_iq_seconds,
+            (FFT_SIZE * 8) / 240_000,
+        )
+        self.assertFalse(stream.rows.empty())
 
     def test_analyze_iq_finds_tone_inside_requested_span(self) -> None:
         sample_rate = 240_000
@@ -64,6 +104,16 @@ class RtlIqTests(unittest.TestCase):
 
         self.assertAlmostEqual(row.peak_frequency_hz, target_center, delta=row.bin_hz)
         self.assertGreater(abs(row.peak_frequency_hz - tuner_center), 10_000)
+
+    def test_carrier_margin_uses_target_channel_over_band_median(self) -> None:
+        row = SimpleNamespace(
+            low_hz=147_450_000,
+            bin_hz=10_000,
+            powers_dbfs=[-70.0, -69.0, -70.0, -68.0, -66.0, -40.0, -67.0],
+        )
+
+        self.assertGreater(carrier_margin_db(row, 147_500_000), 20.0)
+        self.assertLess(carrier_margin_db(row, 147_460_000), 5.0)
 
 
 if __name__ == "__main__":
