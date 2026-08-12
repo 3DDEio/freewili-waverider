@@ -51,7 +51,8 @@ before relying on it in a field event.
   part of the connected-device test matrix.
 
 See [Known limitations](docs/LIMITATIONS.md) for consequences and workarounds,
-and the [User guide](docs/USER_GUIDE.md) for normal operation.
+the [User guide](docs/USER_GUIDE.md) for normal operation, and the
+[documentation index](docs/README.md) for the complete project record.
 
 ## What it does
 
@@ -117,6 +118,54 @@ stages and reads back the complete CircuitPython program before activation.
 - An antenna appropriate for the frequency being monitored. A directional
   antenna is required for meaningful bearing work.
 
+## Install current WaveRider from GitHub
+
+This installs the current release candidate without replacing the stock Main
+or Display firmware. The native app is stored on the Main SD card and appears
+as **Apps → Radio → WaveRider**.
+
+1. Install Python 3.11 or newer, clone the repository, and install the small
+   host-side installer dependency. Confirm `python3 --version` reports 3.11+
+   before creating the environment:
+
+   ```text
+   git clone https://github.com/3DDEio/freewili-waverider.git
+   cd freewili-waverider
+   python3 --version
+   python3 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install --upgrade pip
+   python -m pip install '.[installer]'
+   ```
+
+   On Windows, use `python` in place of `python3` and activate the environment
+   with `.venv\Scripts\activate` instead.
+
+2. Connect the FreeWili 2 built-in CMSIS-DAP probe. Install
+   [Raspberry Pi's RP2350-capable OpenOCD](https://github.com/raspberrypi/pico-sdk-tools/releases)
+   on `PATH`, then validate and launch the safe SRAM-only app installer:
+
+   ```text
+   python tools/fw2_install_native_app.py --dry-run
+   python tools/fw2_install_native_app.py
+   ```
+
+3. Wait for **INSTALL COMPLETE**, hold Home for five seconds, and put CM0 Linux
+   into its maintenance/serial-console profile. Identify its serial port, then
+   install and activate the receiver service. Replace the example port as
+   needed (`/dev/ttyACM0` on Linux or a COM port such as `COM7` on Windows):
+
+   ```text
+   python deploy/serial_install.py --port /dev/cu.usbmodem1701 --activate
+   ```
+
+4. The serial port disappears when receiver mode takes ownership of the CM0
+   USB controller; that is expected. Return to the home screen and open
+   **Apps → Radio → WaveRider**.
+
+For OpenOCD overrides, maintenance recovery, and release verification, see the
+[deployment guide](docs/DEPLOYMENT.md).
+
 ## Install from a release
 
 The installer is offline-capable and does not replace FreeWili firmware.
@@ -141,7 +190,8 @@ The installer is offline-capable and does not replace FreeWili firmware.
    ```
 
    Wait for **INSTALL COMPLETE**, then hold Home for five seconds. The loader
-   runs only from volatile SRAM/PSRAM and fail-closes on any QSPI target.
+   runs only from volatile SRAM/PSRAM, fail-closes on any QSPI target, and
+   installs the friendly entry at **Apps → Radio → WaveRider**.
 
 5. Identify the CM0 console port:
 
@@ -159,6 +209,17 @@ The serial port disappearing is expected: the CM0 has one USB controller and
 receiver mode routes it to the Linux USB Host socket. The first receiver boot is
 guarded for two minutes. If the SDR and on-device display do not both become
 live, the installer restores maintenance mode and the serial console returns.
+
+## Repository layout
+
+- `src/` — CM0 Linux receiver, waterfall, Morse, settings, and bridge service.
+- `native/` — FreeWili Display app, self-installer, and pinned native artifacts.
+- `deploy/` — release builder plus serial and on-device installation scripts.
+- `config/` — default field frequencies and service configuration.
+- `docs/` — user, deployment, architecture, validation, and limitation records.
+- `tools/` — safe device diagnostics, maintenance, and verification helpers.
+- `test-beacon/` — optional, separately licensed controlled RF test fixture.
+- `tests/` — host-side behavior, safety, native design, and documentation tests.
 
 ## On-device controls
 

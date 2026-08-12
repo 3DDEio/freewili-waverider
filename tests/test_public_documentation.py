@@ -90,3 +90,46 @@ def test_native_release_artifacts_have_pinned_checksums():
         "waverider_installer.uf2",
     ):
         assert artifact in sums
+
+    display = (ROOT / "native" / "dist" / "waverider_display.uf2").read_bytes()
+    installer = (ROOT / "native" / "dist" / "waverider_installer.elf").read_bytes()
+    assert b"WaveRider" in display
+    assert b"3DDEio/freewili-waverider" in display
+    assert b"/apps/Radio/waverider_display.uf2" in installer
+    assert b"/apps/waverider/waverider_display.uf2" in installer
+
+
+def test_quick_start_and_native_metadata_match_the_radio_menu_contract():
+    readme = README.read_text()
+    guide = USER_GUIDE.read_text()
+    display_cmake = (
+        ROOT / "native" / "waverider_display" / "CMakeLists.txt"
+    ).read_text()
+    installer = (
+        ROOT / "native" / "waverider_installer" / "main.c"
+    ).read_text()
+
+    assert "git clone https://github.com/3DDEio/freewili-waverider.git" in readme
+    assert "Apps → Radio → WaveRider" in readme
+    assert "Apps → Radio → WaveRider" in guide
+    assert 'NAME "WaveRider"' in display_cmake
+    assert 'REPOSITORY "https://github.com/3DDEio/freewili-waverider"' in display_cmake
+    assert '#define APP_DIR  "/apps/Radio"' in installer
+    assert 'LEGACY_APP_PATH "/apps/waverider/waverider_display.uf2"' in installer
+    assert installer.index("size != (uint32_t)waverider_payload_len") < installer.index(
+        "ow_sd_remove(&s_dev, LEGACY_APP_PATH)"
+    )
+
+
+def test_documentation_index_only_links_to_present_local_files():
+    index = ROOT / "docs" / "README.md"
+    linked = []
+    for line in index.read_text().splitlines():
+        if "](" not in line:
+            continue
+        target = line.split("](", 1)[1].split(")", 1)[0]
+        if "://" not in target:
+            linked.append((index.parent / target).resolve())
+
+    assert linked
+    assert all(path.is_file() for path in linked)

@@ -226,10 +226,13 @@ Brand migration begins after the connected device demonstrates:
   diagnostic snapshot. Add a guard to the host mailbox tools so they refuse to
   probe an active WaveRider session unless an explicit maintenance override is
   supplied.
-- [x] Install the native app at `/apps/waverider/waverider_display.uf2` and
-  expose it in the stock Apps menu. Host USB SD enumeration is unreliable on
-  the test Mac, so a verified SRAM-only self-installer now writes the embedded
-  app through Main's supported SDFS service and checks the final byte count.
+- [x] Install the native app at `/apps/Radio/waverider_display.uf2`, label it
+  **WaveRider**, and expose it at **Apps → Radio → WaveRider**. The upgraded
+  self-installer verifies the new file before removing the former
+  `/apps/waverider/waverider_display.uf2` copy. Host USB SD enumeration is
+  unreliable on the test Mac, so a verified SRAM-only self-installer now
+  writes the embedded app through Main's supported SDFS service and checks the
+  final byte count.
   Both freshly rebuilt UF2 artifacts pass the BSP's SRAM-only safety gate. The
   connected self-installer wrote and byte-count-verified the file, and Main
   launched that exact stored copy from the Apps menu. The installer now halts
@@ -249,6 +252,12 @@ Brand migration begins after the connected device demonstrates:
   CODEOWNER review, linear history, and resolved review conversations; force
   pushes and branch deletion are blocked. Secret scanning, push protection,
   private vulnerability reporting, and web commit signoff are enabled.
+- [x] Finish the current release-candidate repository pass: keep stable source
+  paths, add a browsable documentation index and repository map, document the
+  clone/install flow, rebuild the friendly Radio-category native artifacts,
+  and pass host/native/archive validation. The pass completed with 199 host
+  tests, both SRAM-only native gates, archive checksum validation, and a clean
+  extraction dry-run. Publication still follows the protected `main` PR flow.
 - [x] Constrain waterfall plot values to FW2's documented 0..100 plot scale.
   The previous 0..255 encoder caused v07 to reject `g\\e\\f` values above 100 as
   `Invalid`, leaving a partially staged hot/yellow row and a static panel. The
