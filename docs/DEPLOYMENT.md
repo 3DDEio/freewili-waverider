@@ -20,7 +20,7 @@
    export PICOTOOL_DIR=/path/to/picotool/cmake/package
    sh deploy/build-native-apps.sh
    sha256sum -c native/dist/SHA256SUMS
-   python3 wilibsp/tools/check_app_uf2.py native/dist/waverider_display.uf2
+   python3 wilibsp/tools/check_app_uf2.py native/dist/WaveRider.uf2
    python3 wilibsp/tools/check_app_uf2.py native/dist/waverider_installer.uf2
    ```
 
@@ -125,7 +125,7 @@ contains a stock DISPLAY-QSPI payload. The self-installer uses Main's supported
 SDFS service to create:
 
 ```text
-/apps/Radio/waverider_display.uf2
+/apps/Radio/WaveRider.uf2
 ```
 
 Rebuild both artifacts from the pinned external-project tree and run the
@@ -138,7 +138,7 @@ export PICO_TOOLCHAIN_PATH=/path/to/arm-gnu-toolchain-14.2.Rel1
 export PICOTOOL_DIR=/path/to/picotool/cmake/package
 sh deploy/build-native-apps.sh
 sha256sum -c native/dist/SHA256SUMS
-python3 wilibsp/tools/check_app_uf2.py native/dist/waverider_display.uf2
+python3 wilibsp/tools/check_app_uf2.py native/dist/WaveRider.uf2
 python3 wilibsp/tools/check_app_uf2.py native/dist/waverider_installer.uf2
 python3 tools/fw2_install_native_app.py --dry-run
 ```
@@ -164,12 +164,22 @@ Wait for **INSTALL COMPLETE** on the device, then hold Home for five seconds.
 WaveRider can thereafter be launched from **Apps → Radio → WaveRider** or with:
 
 ```text
-python3 wilibsp/tools/fw.py run-app Radio/waverider_display.uf2
+python3 wilibsp/tools/fw.py run-app Radio/WaveRider.uf2
 ```
 
 This is currently the maintainer recovery path for Macs on which the USB-muxed
 Main SD card does not enumerate. Public packages may instead use `fw install-app`
 when the removable volume mounts normally.
+
+For an already-installed pre-release whose menu still shows
+`waverider_display`, use the bounded migration helper. It verifies the SRAM-only
+app, asks Main to expose its SD card, installs `/apps/Radio/WaveRider.uf2`,
+removes the old Radio filename, and removes `/apps/waverider` only when that
+category enumerates as empty:
+
+```text
+python3 tools/fw2_migrate_apps_menu.py --port /dev/cu.usbmodem1701
+```
 
 ## Offline dependencies
 

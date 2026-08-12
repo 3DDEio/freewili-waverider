@@ -26,7 +26,7 @@ DEFAULT_INSTALLER = (
     ROOT / "native/dist/waverider_installer.elf"
 )
 DEFAULT_DISPLAY_UF2 = (
-    ROOT / "native/dist/waverider_display.uf2"
+    ROOT / "native/dist/WaveRider.uf2"
 )
 SRAM_START = 0x20000000
 SRAM_STOP = 0x20082000

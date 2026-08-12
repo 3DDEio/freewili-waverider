@@ -7,7 +7,8 @@ signal mailbox.
 
 `dist/` contains the release artifacts:
 
-- `waverider_display.uf2` — the SRAM-only Apps-menu application.
+- `WaveRider.uf2` — the SRAM-only Apps-menu application. The friendly filename
+  is intentional because current v07 menus display the UF2 stem.
 - `waverider_display.elf` — the same volatile app for probe-assisted testing.
 - `waverider_installer.elf` — the volatile maintainer self-installer image.
 - `waverider_installer.uf2` — the self-installer UF2 for safety inspection.
@@ -40,9 +41,11 @@ python3 tools/fw2_install_native_app.py
 ```
 
 Wait for **INSTALL COMPLETE**, then hold Home for five seconds. WaveRider will
-be available under `/apps/Radio/waverider_display.uf2` as
-**Apps → Radio → WaveRider**. A verified upgrade removes the former
-`/apps/waverider/waverider_display.uf2` copy so the menu does not retain a
-duplicate legacy entry. Upgrade writes a separate candidate, reads every byte
-back, retains the prior app under `/appdata/waverider/`, and restores it if
-promotion or final verification fails.
+be available under `/apps/Radio/WaveRider.uf2` as
+**Apps → Radio → WaveRider**. A verified upgrade removes both the former
+`/apps/Radio/waverider_display.uf2` and
+`/apps/waverider/waverider_display.uf2` copies, then removes the old
+`/apps/waverider` category only after enumerating it and proving it is empty.
+Upgrade writes a separate candidate, reads every byte back, retains the prior
+app under `/appdata/waverider/`, and restores it if promotion or final
+verification fails.

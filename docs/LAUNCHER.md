@@ -10,7 +10,7 @@ and reveals live CM0 data without opening an interactive Linux terminal.
 - Service: `/etc/systemd/system/freewili-foxhunt.service`
 - Saved lists and marks: `/var/lib/freewili-foxhunt`
 - Runtime status: `/run/freewili-foxhunt/status.json`
-- Apps-menu image: `/apps/Radio/waverider_display.uf2`
+- Apps-menu image: `/apps/Radio/WaveRider.uf2`
 - Splash and RSSI scale: drawn by the native app; no Main-SD image dependency
 
 The service remains separately maintainable from the CM0 console, but normal

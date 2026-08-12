@@ -63,7 +63,7 @@ python3 "$WILIBSP_DIR/tools/check_app_uf2.py" \
 
 mkdir -p "$ROOT/native/dist"
 cp "$BUILD_DIR/apps/waverider_display/waverider_display.uf2" \
-   "$ROOT/native/dist/waverider_display.uf2"
+   "$ROOT/native/dist/WaveRider.uf2"
 cp "$BUILD_DIR/apps/waverider_display/waverider_display.elf" \
    "$ROOT/native/dist/waverider_display.elf"
 cp "$BUILD_DIR/apps/waverider_installer/waverider_installer.elf" \
@@ -74,7 +74,7 @@ cp "$BUILD_DIR/apps/waverider_installer/waverider_installer.uf2" \
 (
     cd "$ROOT"
     sha256sum native/dist/waverider_display.elf \
-              native/dist/waverider_display.uf2 \
+              native/dist/WaveRider.uf2 \
               native/dist/waverider_installer.elf \
               native/dist/waverider_installer.uf2 >native/dist/SHA256SUMS
 )

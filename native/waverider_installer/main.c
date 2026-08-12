@@ -12,11 +12,13 @@
 #include <stdio.h>
 
 #define APP_DIR  "/apps/Radio"
-#define APP_PATH APP_DIR "/waverider_display.uf2"
-#define APP_STAGE APP_DIR "/waverider_display.new"
+#define APP_PATH APP_DIR "/WaveRider.uf2"
+#define APP_STAGE APP_DIR "/WaveRider.new"
 #define APPDATA_DIR "/appdata"
 #define APPDATA_APP_DIR APPDATA_DIR "/waverider"
 #define APP_BACKUP APPDATA_APP_DIR "/waverider_display.previous.uf2"
+#define OLD_RADIO_APP_PATH APP_DIR "/waverider_display.uf2"
+#define LEGACY_APP_DIR "/apps/waverider"
 #define LEGACY_APP_PATH "/apps/waverider/waverider_display.uf2"
 #define CHUNK_SIZE 1024u
 #define SD_RECLAIM_ATTEMPTS 30u
@@ -28,6 +30,10 @@ extern const uint8_t waverider_payload_xor;
 
 static ow_device s_dev;
 static uint8_t s_decoded[CHUNK_SIZE];
+
+typedef struct {
+    uint32_t entries;
+} directory_count;
 
 static inline uint16_t be16(uint16_t color) {
     return (uint16_t)((color >> 8) | (color << 8));
@@ -92,6 +98,70 @@ static bool path_is_regular_file(const char *path, bool *exists) {
     DIAG("waverider-installer: stat failed path=%s status=%d sdfs=%d\n",
          path, (int)status, (int)ow_sd_last_error());
     return false;
+}
+
+static void count_directory_entry(const char *name, bool is_dir,
+                                  uint32_t size, void *user) {
+    directory_count *count = (directory_count *)user;
+    (void)name;
+    (void)is_dir;
+    (void)size;
+    count->entries++;
+}
+
+static void preserve_or_remove_old_radio_app(void) {
+    bool old_exists = false;
+    if (!path_is_regular_file(OLD_RADIO_APP_PATH, &old_exists) || !old_exists) {
+        return;
+    }
+
+    bool backup_exists = false;
+    if (!path_is_regular_file(APP_BACKUP, &backup_exists)) {
+        return;
+    }
+    if (!backup_exists) {
+        (void)ow_sd_mkdir(&s_dev, APPDATA_DIR);
+        (void)ow_sd_mkdir(&s_dev, APPDATA_APP_DIR);
+        if (ow_sd_rename(&s_dev, OLD_RADIO_APP_PATH, APP_BACKUP) == OW_OK) {
+            DIAG("waverider-installer: preserved old Radio app as backup\n");
+            return;
+        }
+        DIAG("waverider-installer: old Radio backup failed sdfs=%d\n",
+             (int)ow_sd_last_error());
+        return;
+    }
+
+    ow_status status = ow_sd_remove(&s_dev, OLD_RADIO_APP_PATH);
+    DIAG("waverider-installer: old Radio cleanup %s status=%d\n",
+         OLD_RADIO_APP_PATH, (int)status);
+}
+
+static void remove_empty_legacy_app_directory(void) {
+    bool is_dir = false;
+    uint32_t ignored_size = 0;
+    ow_status stat_status =
+        ow_sd_stat(&s_dev, LEGACY_APP_DIR, &is_dir, &ignored_size);
+    if (stat_status != OW_OK || !is_dir) {
+        return;
+    }
+
+    directory_count count = {0};
+    ow_status list_status = ow_sd_list(&s_dev, LEGACY_APP_DIR,
+                                       count_directory_entry, &count);
+    if (list_status != OW_OK) {
+        DIAG("waverider-installer: legacy directory list failed sdfs=%d\n",
+             (int)ow_sd_last_error());
+        return;
+    }
+    if (count.entries != 0u) {
+        DIAG("waverider-installer: keeping non-empty %s entries=%u\n",
+             LEGACY_APP_DIR, (unsigned)count.entries);
+        return;
+    }
+
+    ow_status remove_status = ow_sd_remove(&s_dev, LEGACY_APP_DIR);
+    DIAG("waverider-installer: empty legacy directory cleanup %s status=%d\n",
+         LEGACY_APP_DIR, (int)remove_status);
 }
 
 static bool recover_interrupted_upgrade(void) {
@@ -263,12 +333,16 @@ static bool install_payload(void) {
     }
     DIAG("waverider-installer: installed %s (%u bytes); backup=%s\n", APP_PATH,
          (unsigned)waverider_payload_len, APP_BACKUP);
-    /* Older WaveRider builds installed at /apps/waverider. Remove that file
-     * only after the new Radio-category copy has been closed and verified so
-     * an upgrade cannot leave the user without a launchable app. */
+    /* Menu labels on current v07 firmware follow the UF2 filename. Keep the
+     * verified friendly-name copy before removing either older location. If
+     * there is no newer rollback file, retain the old Radio copy as backup. */
+    preserve_or_remove_old_radio_app();
     ow_status legacy_status = ow_sd_remove(&s_dev, LEGACY_APP_PATH);
     DIAG("waverider-installer: legacy cleanup %s status=%d\n",
          LEGACY_APP_PATH, (int)legacy_status);
+    /* Never remove a category blindly. List it after the known legacy file is
+     * gone and remove it only when Main reports zero remaining entries. */
+    remove_empty_legacy_app_directory();
     return true;
 }
 

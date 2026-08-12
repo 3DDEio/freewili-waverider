@@ -90,16 +90,17 @@ def test_native_release_artifacts_have_pinned_checksums():
     sums = (ROOT / "native" / "dist" / "SHA256SUMS").read_text()
     for artifact in (
         "waverider_display.elf",
-        "waverider_display.uf2",
+        "WaveRider.uf2",
         "waverider_installer.elf",
         "waverider_installer.uf2",
     ):
         assert artifact in sums
 
-    display = (ROOT / "native" / "dist" / "waverider_display.uf2").read_bytes()
+    display = (ROOT / "native" / "dist" / "WaveRider.uf2").read_bytes()
     installer = (ROOT / "native" / "dist" / "waverider_installer.elf").read_bytes()
     assert b"WaveRider" in display
     assert b"3DDEio/freewili-waverider" in display
+    assert b"/apps/Radio/WaveRider.uf2" in installer
     assert b"/apps/Radio/waverider_display.uf2" in installer
     assert b"/apps/waverider/waverider_display.uf2" in installer
 
@@ -120,15 +121,22 @@ def test_quick_start_and_native_metadata_match_the_radio_menu_contract():
     assert 'NAME "WaveRider"' in display_cmake
     assert 'REPOSITORY "https://github.com/3DDEio/freewili-waverider"' in display_cmake
     assert '#define APP_DIR  "/apps/Radio"' in installer
+    assert 'APP_PATH APP_DIR "/WaveRider.uf2"' in installer
+    assert 'OLD_RADIO_APP_PATH APP_DIR "/waverider_display.uf2"' in installer
+    assert 'LEGACY_APP_DIR "/apps/waverider"' in installer
     assert 'LEGACY_APP_PATH "/apps/waverider/waverider_display.uf2"' in installer
-    assert 'APP_STAGE APP_DIR "/waverider_display.new"' in installer
+    assert 'APP_STAGE APP_DIR "/WaveRider.new"' in installer
     assert 'APP_BACKUP APPDATA_APP_DIR "/waverider_display.previous.uf2"' in installer
     assert "content mismatch" in installer
     assert "recover_interrupted_upgrade" in installer
     assert "completed interrupted first install" in installer
     assert "restored interrupted upgrade backup" in installer
     assert installer.index("promote_staged_payload()") < installer.index(
-        "ow_sd_remove(&s_dev, LEGACY_APP_PATH)"
+        "preserve_or_remove_old_radio_app()"
+    )
+    assert "count.entries != 0u" in installer
+    assert installer.index("ow_sd_list(&s_dev, LEGACY_APP_DIR") < installer.index(
+        "ow_sd_remove(&s_dev, LEGACY_APP_DIR)"
     )
 
 
@@ -142,10 +150,10 @@ def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     assert "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09" in release
     assert "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1" in release
     assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in release
-    assert "native/dist/waverider_display.uf2" in release
+    assert "native/dist/WaveRider.uf2" in release
     assert "native/dist/waverider_installer.uf2" in release
     assert "setup-native-ci-linux.sh" in release
-    assert "cmp build/committed-native/waverider_display.uf2" in release
+    assert "cmp build/committed-native/WaveRider.uf2" in release
     assert "cmp build/committed-native/waverider_installer.uf2" in release
     assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in release
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in ci

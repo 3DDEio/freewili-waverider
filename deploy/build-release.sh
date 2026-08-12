@@ -20,7 +20,7 @@ rm -rf "$ROOT/build/freewili-foxhunt-$VERSION"
 mkdir -p "$BUILD_DIR" "$ROOT/dist"
 for artifact in \
     "$ROOT/native/dist/waverider_display.elf" \
-    "$ROOT/native/dist/waverider_display.uf2" \
+    "$ROOT/native/dist/WaveRider.uf2" \
     "$ROOT/native/dist/waverider_installer.elf" \
     "$ROOT/native/dist/waverider_installer.uf2"
 do
