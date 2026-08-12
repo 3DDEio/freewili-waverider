@@ -192,13 +192,14 @@ def test_native_pocket_alert_is_nonblocking_battery_conscious_and_user_configura
     assert "send_command(15" in source
 
 
-def test_page_key_opens_expandable_settings_hub_with_three_runtime_sections():
+def test_page_key_opens_expandable_settings_hub_with_four_runtime_sections():
     source = SOURCE.read_text()
 
     assert "UI_SETTINGS" in source
     assert "UI_CW_DECODER" in source
     assert '"SETTINGS"' in source
     assert '"AUDIO MONITOR"' in source
+    assert '"WATERFALL SPAN"' in source
     assert '"POCKET ALERT"' in source
     assert '"CW DECODER"' in source
     assert '"UP/DOWN SELECT   CHECK OPEN   PAGE BACK"' in source
@@ -207,6 +208,21 @@ def test_page_key_opens_expandable_settings_hub_with_three_runtime_sections():
     assert "draw_settings();" in page_handler
     assert "open_selected_setting" in source
     assert "move_settings_cursor" in source
+
+
+def test_waterfall_span_page_is_a_six_step_touch_and_button_slider():
+    source = SOURCE.read_text()
+
+    assert "UI_WATERFALL_SPAN" in source
+    assert "static const uint32_t s_span_profiles_hz[]" in source
+    for value in ("25000u", "100000u", "200000u", "500000u", "1000000u", "2000000u"):
+        assert value in source
+    assert '"NARROW = MORE DETAIL    WIDE = MORE CONTEXT"' in source
+    assert 'draw_button(1, "NARROW", COL_YELLOW);' in source
+    assert 'draw_button(3, "WIDER", COL_BLUE);' in source
+    assert "set_span_profile((uint8_t)index);" in source
+    assert "send_command(0u, (uint8_t)(4u + index));" in source
+    assert "(s_settings_cursor + 4 + delta) % 4" in source
 
 
 def test_settings_are_honest_about_audio_and_cw_toggle_is_persistent():

@@ -93,6 +93,13 @@ never renders a partially updated frame. Display commands use
 `sequence << 8 | opcode << 4 | argument`; Green sends Next, D-pad changes the
 local cursor, and Check/Nav-center sends an explicit selected index.
 
+Settings uses the same durable command mailbox. Opcode zero arguments 4--9
+select the six allowed waterfall spans (25 kHz through 2 MHz). The Display
+updates its stepped slider immediately, while CM0 validates the requested
+profile, atomically saves it on the active Live and library entries, restarts
+the RTL-SDR at the matching sample profile, and resets the adaptive waterfall
+scale. The next committed row confirms the applied `wr_span` value.
+
 In Lists mode, those same sixteen `wr_f*` slots carry a page of exact integer
 kHz values. The low 16 bits of `wr_row0` carry the page's Live-membership mask
 and its next five bits carry the global Live count; `wr_row1` carries

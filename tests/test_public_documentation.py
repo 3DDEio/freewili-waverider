@@ -54,6 +54,9 @@ def test_user_guide_preserves_the_physically_validated_button_map():
     assert "`433200`" in guide
     assert "tap the `sdr live` label" in guide.lower()
     assert "press Red **Refresh**" in guide
+    assert "**Waterfall Span**" in guide
+    assert "25 kHz, 100 kHz, 200 kHz" in guide
+    assert "immediately retunes the SDR" in guide
 
 
 def test_public_repository_governance_files_are_present():

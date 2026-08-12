@@ -310,8 +310,18 @@ Brand migration begins after the connected device demonstrates:
 
 ## Subsequent WaveRider features
 
+- [x] Add the documented 25 kHz--2 MHz Waterfall Span control to Settings.
+  The native page presents six honest discrete profiles on a touch/D-pad
+  slider, retunes immediately through the acknowledged command mailbox, and
+  persists the selected span with both the active Live entry and matching
+  saved-library entry. Automated coverage proves every command mapping,
+  validation, retune, persistence, and native interaction path; all 205 host
+  tests and the SRAM-only native build pass. Physical on-device span/plot
+  validation remains part of the connected-device audit.
+
 - [x] Replace the Page-key Pocket Alert shortcut with an expandable Settings
-  hub. The deployed UI now groups Audio Monitor, Pocket Alert, and CW Decoder;
+  hub. The deployed UI now groups Audio Monitor, Waterfall Span, Pocket Alert,
+  and CW Decoder;
   Up/Down selects a row and Check opens it without stopping SDR acquisition.
   Pocket Alert retains its persistent threshold/Test controls. CW processing
   now has an atomic persistent enable switch that resets pending decoder state

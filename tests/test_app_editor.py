@@ -59,11 +59,13 @@ class FakeDisplay:
 class FakeSdr:
     def __init__(self) -> None:
         self.started = []
+        self.started_spans = []
         self.stopped = 0
         self.cw_enabled = None
 
     def start(self, entry) -> None:
         self.started.append(entry.frequency_hz)
+        self.started_spans.append(entry.span_hz)
 
     def stop(self) -> None:
         self.stopped += 1
@@ -117,6 +119,33 @@ class AppEditorTests(unittest.TestCase):
             app = self.make_app(directory)
             app._execute_editor_action("SPAN")
             self.assertEqual(app.entry.span_hz, 500_000)
+
+    def test_settings_span_command_retunes_and_persists_active_frequency(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            app = self.make_app(directory)
+
+            app._handle_action("span:1000000")
+
+            self.assertEqual(app.entry.span_hz, 1_000_000)
+            self.assertEqual(app.sdr.started_spans[-1], 1_000_000)
+            saved = app.store.load_all()[0]
+            self.assertEqual(saved.frequencies[0].span_hz, 1_000_000)
+            matching = next(
+                entry
+                for entry in app.library_store.load()
+                if entry.frequency_hz == app.entry.frequency_hz
+            )
+            self.assertEqual(matching.span_hz, 1_000_000)
+            self.assertFalse(app.dirty)
+
+    def test_settings_span_command_rejects_unsupported_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            app = self.make_app(directory)
+
+            app._handle_action("span:750000")
+
+            self.assertEqual(app.entry.span_hz, 200_000)
+            self.assertEqual(app.sdr.started_spans, [])
 
     def test_live_button_actions_match_screen_labels(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

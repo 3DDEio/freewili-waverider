@@ -462,6 +462,19 @@ def test_native_display_decodes_confirmed_message_history_clear():
     assert transport.batches[-1] == ["s\\i\\s wr_ack 1.000"]
 
 
+def test_native_display_decodes_all_waterfall_span_profiles():
+    transport = FakeSignalTransport()
+    display = NativeSignalDisplay(lambda: transport)
+    display.connect()
+
+    spans = (25_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000)
+    for sequence, span_hz in enumerate(spans, start=1):
+        transport.command_value = (sequence << 8) | (4 + sequence - 1)
+        display._next_command_poll = 0
+        assert display.poll_action() == f"span:{span_hz}"
+        assert transport.batches[-1] == [f"s\\i\\s wr_ack {sequence}.000"]
+
+
 def test_native_display_decodes_library_management_commands():
     transport = FakeSignalTransport()
     display = NativeSignalDisplay(lambda: transport)
