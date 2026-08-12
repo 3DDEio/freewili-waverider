@@ -41,6 +41,13 @@ is visibly open, return Home, and relaunch WaveRider. Do not restart
 Use `sudo foxhuntctl doctor` only after the terminal route has been cleanly
 closed.
 
+Do not run host-side `wr_*` app-signal polling loops while WaveRider is live.
+On the tested FX0177 v07 unit, Main USB mailbox reads competed with the CM0
+service's own response stream and were followed by repeated native Display
+publication timeouts. The SDR process can remain healthy while the visible row
+sequence stalls. Leave Main USB idle during an RF/CW field test; pause
+WaveRider before attaching maintenance diagnostics.
+
 ## Stale or duplicated foxhunt panels
 
 The FreeWili display retains dynamic panels until explicitly reset. Current

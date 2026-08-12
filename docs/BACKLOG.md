@@ -210,6 +210,16 @@ Brand migration begins after the connected device demonstrates:
   the existing nonblocking sequencer, preserving three 150 ms pulses and 80 ms
   gaps while buttons, app signals, and SDR rows continue to be serviced.
   Repeat Page, Enable/threshold, Test, Back, and Refresh on the fixed build.
+  A simultaneous beacon/WaveRider CW test also proved that host-side Main USB
+  app-signal reads are not passive while the CM0 service owns the live
+  OneWili mailbox. Repeated `wr_*` probes correlated with `s\\i\\s` publication
+  timeouts, temporary `wr_ready=0`, and a stopped visible row sequence even
+  though `freewili-foxhunt.service` remained active and running. Live field
+  validation must therefore leave Main USB idle; collect CM0 status only after
+  WaveRider is deliberately paused or through a future service-owned
+  diagnostic snapshot. Add a guard to the host mailbox tools so they refuse to
+  probe an active WaveRider session unless an explicit maintenance override is
+  supplied.
 - [x] Install the native app at `/apps/waverider/waverider_display.uf2` and
   expose it in the stock Apps menu. Host USB SD enumeration is unreliable on
   the test Mac, so a verified SRAM-only self-installer now writes the embedded
