@@ -890,6 +890,18 @@ class FoxhuntApp:
                     waterfall_row_rate_hz=round(row_rate_hz, 2),
                     display_push_ms=round(self._display_push_ms, 1),
                     sdr_queue_depth=self.sdr.rows.qsize(),
+                    sdr_realtime_ratio=round(
+                        float(getattr(self.sdr, "realtime_ratio", 0.0)), 3
+                    ),
+                    sdr_processing_ms=round(
+                        float(getattr(self.sdr, "last_processing_ms", 0.0)), 1
+                    ),
+                    sdr_carrier_active=bool(
+                        getattr(self.sdr, "carrier_active", False)
+                    ),
+                    sdr_carrier_margin_db=round(
+                        float(getattr(self.sdr, "carrier_margin_db", 0.0)), 1
+                    ),
                     morse_message=self.last_morse_message,
                     morse_confidence=self.last_morse_confidence,
                     morse_history_count=sum(
@@ -915,6 +927,25 @@ class FoxhuntApp:
                     ),
                     morse_attempt_rejection=getattr(
                         morse_timing, "last_attempt_rejection", None
+                    ),
+                    morse_attempt_count=getattr(morse_timing, "attempt_count", 0),
+                    morse_attempt_raw_duration_ms=getattr(
+                        morse_timing, "last_attempt_raw_duration_ms", None
+                    ),
+                    morse_attempt_duration_ms=getattr(
+                        morse_timing, "last_attempt_duration_ms", None
+                    ),
+                    morse_attempt_raw_mark_count=getattr(
+                        morse_timing, "last_attempt_raw_mark_count", 0
+                    ),
+                    morse_attempt_raw_gap_count=getattr(
+                        morse_timing, "last_attempt_raw_gap_count", 0
+                    ),
+                    morse_attempt_raw_mark_range_ms=getattr(
+                        morse_timing, "last_attempt_raw_mark_range_ms", None
+                    ),
+                    morse_attempt_raw_gap_range_ms=getattr(
+                        morse_timing, "last_attempt_raw_gap_range_ms", None
                     ),
                     morse_attempt_mark_count=getattr(
                         morse_timing, "last_attempt_mark_count", 0

@@ -19,6 +19,9 @@ FFT_SIZE = 256
 AVERAGE_WINDOWS = 8
 TARGET_PERIOD_SECONDS = 0.1
 DC_NOTCH_HALF_WIDTH_BINS = 3
+CARRIER_ATTACK_MARGIN_DB = 8.0
+CARRIER_RELEASE_MARGIN_DB = 4.0
+CARRIER_RELEASE_BLOCKS = 5
 
 
 def _fft(values: list[complex]) -> None:
@@ -117,8 +120,30 @@ def analyze_iq(
     )
 
 
+def carrier_margin_db(
+    row: SpectrumRow,
+    target_center_hz: int,
+    half_width_hz: int = 6_000,
+) -> float:
+    """Return target-channel peak power above the robust band median."""
+
+    if not row.powers_dbfs:
+        return 0.0
+    ordered = sorted(row.powers_dbfs)
+    noise_median = ordered[len(ordered) // 2]
+    near_target = [
+        power
+        for index, power in enumerate(row.powers_dbfs)
+        if abs((row.low_hz + index * row.bin_hz) - target_center_hz)
+        <= half_width_hz
+    ]
+    if not near_target:
+        return 0.0
+    return max(near_target) - noise_median
+
+
 class RtlIqStream:
-    """Continuously publishes latest-only FFT rows at a 10 Hz target."""
+    """Continuously capture IQ while a second thread analyzes each block."""
 
     def __init__(self, library: ctypes.CDLL | None = None) -> None:
         if library is None:
@@ -128,15 +153,23 @@ class RtlIqStream:
         self._configure_api()
         self.rows: queue.Queue[SpectrumRow | Exception] = queue.Queue(maxsize=2)
         self.messages: queue.Queue[DecodedMessage] = queue.Queue(maxsize=4)
+        self.iq_blocks: queue.Queue[bytes] = queue.Queue(maxsize=4)
         self.morse_decoder = NfmMorseDecoder()
         self.cw_enabled = True
         self.reader: threading.Thread | None = None
+        self.processor: threading.Thread | None = None
         self.device = ctypes.c_void_p()
         self.stop_event = threading.Event()
         self.entry: FrequencyEntry | None = None
         self.sample_rate_hz = 0
         self.tuner_center_hz = 0
         self.read_bytes = 0
+        self.processed_iq_seconds = 0.0
+        self.capture_started_monotonic = 0.0
+        self.last_processing_ms = 0.0
+        self.carrier_active = False
+        self.carrier_margin_db = 0.0
+        self._carrier_release_blocks = 0
 
     def _configure_api(self) -> None:
         api = self.library
@@ -176,6 +209,8 @@ class RtlIqStream:
             self.rows.get_nowait()
         while not self.messages.empty():
             self.messages.get_nowait()
+        while not self.iq_blocks.empty():
+            self.iq_blocks.get_nowait()
         self.morse_decoder.reset()
         entry.validate()
         self.entry = entry
@@ -202,8 +237,16 @@ class RtlIqStream:
             self.device = ctypes.c_void_p()
             raise
         self.stop_event.clear()
+        self.processed_iq_seconds = 0.0
+        self.capture_started_monotonic = time.monotonic()
+        self.last_processing_ms = 0.0
+        self.carrier_active = False
+        self.carrier_margin_db = 0.0
+        self._carrier_release_blocks = 0
         self.reader = threading.Thread(target=self._read_loop, daemon=True)
+        self.processor = threading.Thread(target=self._process_loop, daemon=True)
         self.reader.start()
+        self.processor.start()
 
     def _publish(self, item: SpectrumRow | Exception) -> None:
         if self.rows.full():
@@ -216,12 +259,10 @@ class RtlIqStream:
         self.messages.put_nowait(item)
 
     def _read_loop(self) -> None:
-        assert self.entry is not None
         buffer = ctypes.create_string_buffer(self.read_bytes)
         read = ctypes.c_int()
         try:
             while not self.stop_event.is_set():
-                started = time.monotonic()
                 self._check(
                     self.library.rtlsdr_read_sync(
                         self.device, buffer, self.read_bytes, ctypes.byref(read)
@@ -231,41 +272,87 @@ class RtlIqStream:
                 if read.value < FFT_SIZE * 2:
                     continue
                 payload = buffer.raw[: read.value]
-                self._publish(
-                    analyze_iq(
-                        payload,
-                        self.tuner_center_hz,
-                        self.entry.frequency_hz,
-                        self.sample_rate_hz,
-                        self.entry.span_hz,
-                    )
+                try:
+                    self.iq_blocks.put(payload, timeout=0.4)
+                except queue.Full as error:
+                    raise RuntimeError(
+                        "IQ processing fell more than 400 ms behind real time"
+                    ) from error
+        except Exception as error:
+            if not self.stop_event.is_set():
+                self._publish(error)
+                self.stop_event.set()
+
+    def _process_loop(self) -> None:
+        assert self.entry is not None
+        try:
+            while not self.stop_event.is_set() or not self.iq_blocks.empty():
+                try:
+                    payload = self.iq_blocks.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                started = time.monotonic()
+                row = analyze_iq(
+                    payload,
+                    self.tuner_center_hz,
+                    self.entry.frequency_hz,
+                    self.sample_rate_hz,
+                    self.entry.span_hz,
                 )
+                self._publish(row)
+                self.carrier_margin_db = carrier_margin_db(
+                    row, self.entry.frequency_hz
+                )
+                if self.carrier_active:
+                    if self.carrier_margin_db >= CARRIER_RELEASE_MARGIN_DB:
+                        self._carrier_release_blocks = 0
+                    else:
+                        self._carrier_release_blocks += 1
+                        if self._carrier_release_blocks >= CARRIER_RELEASE_BLOCKS:
+                            self.carrier_active = False
+                            self._carrier_release_blocks = 0
+                elif self.carrier_margin_db >= CARRIER_ATTACK_MARGIN_DB:
+                    self.carrier_active = True
+                    self._carrier_release_blocks = 0
                 if self.cw_enabled:
                     for message in self.morse_decoder.feed_iq(
                         payload,
                         self.sample_rate_hz,
                         self.tuner_center_hz,
                         self.entry.frequency_hz,
+                        carrier_active=self.carrier_active,
                     ):
                         self._publish_message(message)
-                remaining = TARGET_PERIOD_SECONDS - (time.monotonic() - started)
-                if remaining > 0:
-                    self.stop_event.wait(remaining)
+                self.processed_iq_seconds += len(payload) / (2.0 * self.sample_rate_hz)
+                self.last_processing_ms = (time.monotonic() - started) * 1000.0
         except Exception as error:
             if not self.stop_event.is_set():
                 self._publish(error)
+                self.stop_event.set()
 
     def stop(self) -> None:
         self.stop_event.set()
         if self.reader is not None:
             self.reader.join(timeout=1.0)
             self.reader = None
+        if self.processor is not None:
+            self.processor.join(timeout=1.0)
+            self.processor = None
         if self.device.value:
             self.library.rtlsdr_close(self.device)
             self.device = ctypes.c_void_p()
 
     def close(self) -> None:
         self.stop()
+
+    @property
+    def realtime_ratio(self) -> float:
+        if self.capture_started_monotonic <= 0.0:
+            return 0.0
+        elapsed = time.monotonic() - self.capture_started_monotonic
+        if elapsed <= 0.0:
+            return 0.0
+        return self.processed_iq_seconds / elapsed
 
     def set_cw_enabled(self, enabled: bool) -> None:
         enabled = bool(enabled)

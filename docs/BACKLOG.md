@@ -475,6 +475,25 @@ Brand migration begins after the connected device demonstrates:
   survive alongside the existing dash-fade test, and all 65 focused decoder,
   IQ, runtime, history, settings, display, and Pocket Alert tests pass.
 
+  **2026-08-12 live-decoder breakthrough:** bounded instrumentation proved the
+  earlier single-threaded loop processed only 0.693 seconds of IQ per real
+  second because it paused SDR reads while doing FFT and Morse analysis. A
+  bounded reader/processor handoff now keeps USB collection continuous and
+  fails visibly instead of silently dropping timing if its four-block queue
+  ever fills. Connected CM0 throughput measures 0.990--0.999x real time with
+  no overrun. Target-channel carrier hysteresis now keeps one keyed
+  transmission open across brief audio fades, with a bounded five-second
+  fallback for ambiguous/stuck carriers. At the restored 16 kHz audio working
+  rate, one 37.36-second field reception retained exactly 108 marks and 107
+  gaps, fitted 93.3 ms / 13 WPM, and decoded the complete ground truth
+  `KO6FQY JOIN NORCALCYBER.IO! KO6FQY` at confidence 0.964 and timing
+  confidence 0.928. Two additional controlled receptions agreed exactly.
+  Persistent history now contains one verified 147.500 MHz record with 3/3
+  evidence and agreement 1.00. Seventy focused decoder/IQ/runtime/history/
+  settings/display/Pocket Alert tests pass. Keep this gate open until ten
+  complete live transmissions, the 144.300 MHz control duration, and physical
+  MSGS grouping/Clear checks are complete.
+
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
   windows, adapts
