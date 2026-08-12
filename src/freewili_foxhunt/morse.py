@@ -388,7 +388,7 @@ class NfmMorseDecoder:
     AUDIO_RATE_HZ = 16_000
     WINDOW_SECONDS = 0.020
     ATTACK_WINDOWS = 2
-    RELEASE_WINDOWS = 3
+    RELEASE_WINDOWS = 2
 
     def __init__(self, tone_hz: float = 800.0) -> None:
         self.tone_hz = tone_hz
@@ -540,9 +540,11 @@ class NfmMorseDecoder:
         # The candidate is now real. Feed its complete buffered duration to
         # the new state; the old implementation repeatedly fed those windows
         # to the prior state while waiting, systematically distorting both
-        # marks and gaps. Three-window release bridges up to 40 ms of fading
-        # inside a dash while a real 13 WPM separator (about 92 ms) still
-        # crosses cleanly with its full duration preserved.
+        # marks and gaps. Two-window release preserves the connected
+        # receiver's shortest real 60 ms separators. A two-window (40 ms)
+        # fade inside a dash is accepted here and then safely rejoined by
+        # MorseTimingDecoder._clean_runs, whose established 13 WPM threshold
+        # is deliberately above 40 ms and below 60 ms.
         duration = self._candidate_duration_seconds
         candidate_evidence = (
             median(self._candidate_evidence)

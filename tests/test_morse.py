@@ -238,6 +238,64 @@ def test_nfm_debounce_bridges_two_window_fades_inside_dashes() -> None:
     )
 
 
+def test_nfm_preserves_three_window_field_gaps_across_complete_payload() -> None:
+    """Keep 60 ms live gaps distinct while repairing 40 ms dash fades.
+
+    The connected 13 WPM run retained only 48 of the beacon's intended 108
+    marks when release debounce required three windows. Its surviving gap
+    minimum was exactly 60 ms: a three-window real separator. Accepting a
+    transition after two windows exposes 40 ms fades to the bounded run
+    cleaner while preserving those observed 60 ms separators.
+    """
+
+    decoder = NfmMorseDecoder(tone_hz=800.0)
+    text_to_morse = {
+        character: pattern for pattern, character in MORSE_TO_TEXT.items()
+    }
+    text = "KO6FQY JOIN NORCALCYBER.IO! KO6FQY"
+    messages = []
+
+    def windows(tone: bool, count: int) -> None:
+        for _ in range(count):
+            messages.extend(decoder._feed_tone_window(tone, 1.0))
+
+    windows(False, 5)
+    mark_number = 0
+    for character_index, character in enumerate(text):
+        if character == " ":
+            # The preceding character already supplied 9 windows (roughly
+            # three units); extend that separator to a seven-unit word gap.
+            windows(False, 18)
+            continue
+        pattern = text_to_morse[character]
+        for mark in pattern:
+            if mark == ".":
+                windows(True, 5)
+            else:
+                # Reproduce intermittent two-window fades without teaching
+                # the debounce layer to swallow genuine three-window gaps.
+                if mark_number % 5 == 0:
+                    windows(True, 6)
+                    windows(False, 2)
+                    windows(True, 8)
+                else:
+                    windows(True, 14)
+            mark_number += 1
+            # Use the shortest separator observed in the live diagnostic.
+            windows(False, 3)
+        if character_index != len(text) - 1:
+            # The final mark supplied 3 windows; add 6 to make a character
+            # separator near the observed 180 ms median.
+            windows(False, 6)
+    windows(False, 55)
+
+    assert [message.text for message in messages] == [text]
+    assert decoder.timing.last_attempt_mark_count == 108
+    assert decoder.timing.last_attempt_gap_count == 107
+    assert decoder.timing.last_attempt_unit_ms is not None
+    assert 75.0 <= decoder.timing.last_attempt_unit_ms <= 105.0
+
+
 def test_rejected_noise_cannot_retrain_decoder_to_impossible_slow_speed() -> None:
     decoder = MorseTimingDecoder(initial_wpm=13)
     initial_unit = decoder.unit_seconds
