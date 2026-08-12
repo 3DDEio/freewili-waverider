@@ -12,6 +12,8 @@ All notable public changes to WaveRider are recorded here. The format follows
   Clear and larger word-wrapped decoded text.
 - Optional, separate CircuitPython SA868 development beacon fixture with a
   byte-for-byte verified deployment path.
+- Git-clone installation quick start, repository map, and browsable
+  documentation index.
 
 ### Changed
 
@@ -19,6 +21,11 @@ All notable public changes to WaveRider are recorded here. The format follows
   a bounded queue and visible overrun failure instead of dropped CW timing.
 - Morse carrier hysteresis, separator preservation, whole-message timing fit,
   and three-reception consensus now support exact known-payload field decodes.
+- The native application now identifies itself as **WaveRider** and installs at
+  **Apps → Radio → WaveRider**. Upgrades verify the new copy before removing the
+  former `/apps/waverider` entry.
+- Pytest collection is explicitly confined to WaveRider's tests instead of the
+  pinned vendor SDK research trees.
 
 ### Field validation
 
