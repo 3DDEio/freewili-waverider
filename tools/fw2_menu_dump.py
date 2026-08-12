@@ -31,6 +31,12 @@ def main() -> int:
         default="",
         help="menu letters to visit after root; paths that execute actions can change device state",
     )
+    parser.add_argument(
+        "--reply",
+        action="append",
+        default=[],
+        help="line to send after visiting the menu path; repeat for multiple prompts",
+    )
     args = parser.parse_args()
 
     with serial.Serial(args.port, 1_000_000, timeout=0.1) as port:
@@ -42,6 +48,8 @@ def main() -> int:
         payload = bytearray(b"q\nq\n\x03\n")
         for key in args.path:
             payload.extend(key.encode("ascii") + b"\n")
+        for reply in args.reply:
+            payload.extend(reply.encode("utf-8") + b"\n")
         port.write(payload)
         port.flush()
         print(read_until_quiet(port).decode(errors="replace"))

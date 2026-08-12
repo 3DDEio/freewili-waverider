@@ -1,6 +1,7 @@
 import pytest
 
 from tools.fw2_deploy_live_fix import (
+    MAINTENANCE_INHIBIT,
     MODULES,
     has_shell_prompt,
     open_shell,
@@ -15,6 +16,8 @@ from tools.fw2_deploy_live_fix import (
 def test_live_deploy_includes_runtime_status_permissions_fix():
     assert "status.py" in MODULES
     assert "spectrum.py" in MODULES
+    assert "bridge_recovery.py" in MODULES
+    assert MAINTENANCE_INHIBIT == "/run/freewili-foxhunt/maintenance-shell"
 
 
 def live_status(**overrides):

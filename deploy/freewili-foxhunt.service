@@ -1,6 +1,6 @@
 [Unit]
 Description=FreeWili 2 RTL-SDR Foxhunt
-After=multi-user.target fwcm0-bridge.service
+After=fwcm0-bridge.service
 Wants=fwcm0-bridge.service
 
 [Service]

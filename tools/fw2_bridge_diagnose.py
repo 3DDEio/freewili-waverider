@@ -8,9 +8,21 @@ import argparse
 import serial
 
 try:
-    from .fw2_deploy_live_fix import open_shell, read_remote_line_file, shell_ok, shell_readonly
+    from .fw2_deploy_live_fix import (
+        detach_shell,
+        open_shell,
+        read_remote_line_file,
+        shell_ok,
+        shell_readonly,
+    )
 except ImportError:  # direct script execution
-    from fw2_deploy_live_fix import open_shell, read_remote_line_file, shell_ok, shell_readonly
+    from fw2_deploy_live_fix import (
+        detach_shell,
+        open_shell,
+        read_remote_line_file,
+        shell_ok,
+        shell_readonly,
+    )
 
 
 BRIDGE_FAILURE_MARKERS = (
@@ -62,8 +74,11 @@ def main() -> int:
 
     with serial.Serial(args.port, 1_000_000, timeout=0.05) as port:
         open_shell(port)
-        shell_ok(port, "stty -echo")
         try:
+            # This first shell command can fail when the bridge is exactly the
+            # component under diagnosis, so it must be inside the cleanup
+            # scope too. Otherwise the diagnostic itself retains TYPE_SHELL.
+            shell_ok(port, "stty -echo")
             state = shell_readonly(
                 port,
                 "systemctl show fwcm0-bridge.service -p ActiveState -p SubState "
@@ -84,6 +99,10 @@ def main() -> int:
                 shell_ok(port, "stty echo")
             except Exception:
                 pass
+            # Closing the host serial descriptor does not end Main's routed
+            # TYPE_SHELL session on FW2 v07. Exit the login so BashPty emits
+            # SHELL_EXIT and gives app-signal ownership back to WaveRider.
+            detach_shell(port)
     print("PASS: fwcm0 bridge is active and has no current-boot router failure.")
     return 0
 
