@@ -387,6 +387,12 @@ and the [Security policy](SECURITY.md). The repository's pre-public work is
 recorded honestly in [Project history](HISTORY.md); it is a reconstructed
 milestone record, not fabricated Git history.
 
+## Credits
+
+WaveRider was created by **KO6FQY** and **KO6FQJ**, with contributions from
+the WaveRider community. The device also contains a small animated creator
+credit for curious operators to discover.
+
 ## Current beta boundary
 
 The RTL-SDR capture, persistence, health reporting, recovery profiles, native

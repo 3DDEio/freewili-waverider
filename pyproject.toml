@@ -9,7 +9,7 @@ description = "Receive-only RTL-SDR foxhunt instrument for FreeWili 2"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
-authors = [{name = "FreeWili Foxhunt contributors"}]
+authors = [{name = "KO6FQY and KO6FQJ"}]
 dependencies = []
 classifiers = [
     "Operating System :: POSIX :: Linux",

@@ -35,6 +35,27 @@ def test_native_app_owns_a_three_second_procedural_splash():
     assert "if (x < 140u && y < 28u)" in source
 
 
+def test_creator_easter_egg_is_animated_bounded_and_safely_reachable():
+    source = SOURCE.read_text()
+
+    assert "UI_CREATOR_CREDITS" in source
+    assert "#define CREATOR_SPLASH_MS 6000u" in source
+    assert "#define CREATOR_SEQUENCE_TIMEOUT_US 4000000u" in source
+    assert "static void draw_creator_credits_frame(uint32_t frame)" in source
+    assert '"// WAVERIDER::CREATOR UPLINK"' in source
+    assert '"SIGNAL ORIGIN"' in source
+    assert '"KO6FQY"' in source
+    assert '"KO6FQJ"' in source
+    assert '"ANY KEY OR TAP TO RETURN"' in source
+    assert "UARTKBD_BTN_NAV_UP, UARTKBD_BTN_NAV_UP" in source
+    assert "UARTKBD_BTN_NAV_DOWN, UARTKBD_BTN_NAV_DOWN" in source
+    assert "UARTKBD_BTN_NAV_LEFT, UARTKBD_BTN_NAV_RIGHT" in source
+    assert "s_settings_cursor = s_creator_sequence_start_cursor;" in source
+    assert "draw_creator_credits_frame(s_creator_frame++);" in source
+    assert "next_ui_refresh = now + 100000u;" in source
+    assert "if (s_ui_mode == UI_CREATOR_CREDITS)" in source
+
+
 def test_native_live_controls_and_startup_feedback_match_field_workflow():
     source = SOURCE.read_text()
 

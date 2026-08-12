@@ -310,12 +310,18 @@ Brand migration begins after the connected device demonstrates:
 
 ## Subsequent WaveRider features
 
+- [x] Add a creator-credits Easter egg without stealing a field control. The
+  Settings-only `Up Up Down Down Left Right Left Right` sequence opens a
+  six-second animated cyber-RF uplink crediting KO6FQY and KO6FQJ equally.
+  Any key or touch dismisses it, successful entry restores the original
+  Settings row, and list/SDR mailbox commits cannot overwrite the animation.
+
 - [x] Add the documented 25 kHz--2 MHz Waterfall Span control to Settings.
   The native page presents six honest discrete profiles on a touch/D-pad
   slider, retunes immediately through the acknowledged command mailbox, and
   persists the selected span with both the active Live entry and matching
   saved-library entry. Automated coverage proves every command mapping,
-  validation, retune, persistence, and native interaction path; all 205 host
+  validation, retune, persistence, and native interaction path; all 206 host
   tests and the SRAM-only native build pass. Physical on-device span/plot
   validation remains part of the connected-device audit.
 
