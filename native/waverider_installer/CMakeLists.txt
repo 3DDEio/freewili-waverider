@@ -18,6 +18,8 @@ add_custom_command(
 add_executable(waverider_installer main.c "${WAVERIDER_PAYLOAD_C}")
 target_link_libraries(waverider_installer freewili2_bsp onewili_fwgui)
 fw2_display_app(waverider_installer
+    NAME "WaveRider Installer"
     POWER_ZONES DISPLAY SDCARD
     VERSION 001
-    DESCRIPTION "Install the verified WaveRider app onto the Main SD card")
+    DESCRIPTION "Install the verified WaveRider app onto the Main SD card"
+    REPOSITORY "https://github.com/3DDEio/freewili-waverider")

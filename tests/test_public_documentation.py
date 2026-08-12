@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import tarfile
 
 
 ROOT = Path(__file__).parents[1]
@@ -112,16 +114,66 @@ def test_quick_start_and_native_metadata_match_the_radio_menu_contract():
         ROOT / "native" / "waverider_installer" / "main.c"
     ).read_text()
 
-    assert "git clone https://github.com/3DDEio/freewili-waverider.git" in readme
+    assert "git clone --recurse-submodules https://github.com/3DDEio/freewili-waverider.git" in readme
     assert "Apps → Radio → WaveRider" in readme
     assert "Apps → Radio → WaveRider" in guide
     assert 'NAME "WaveRider"' in display_cmake
     assert 'REPOSITORY "https://github.com/3DDEio/freewili-waverider"' in display_cmake
     assert '#define APP_DIR  "/apps/Radio"' in installer
     assert 'LEGACY_APP_PATH "/apps/waverider/waverider_display.uf2"' in installer
-    assert installer.index("size != (uint32_t)waverider_payload_len") < installer.index(
+    assert 'APP_STAGE APP_DIR "/waverider_display.new"' in installer
+    assert 'APP_BACKUP APPDATA_APP_DIR "/waverider_display.previous.uf2"' in installer
+    assert "content mismatch" in installer
+    assert "recover_interrupted_upgrade" in installer
+    assert "completed interrupted first install" in installer
+    assert "restored interrupted upgrade backup" in installer
+    assert installer.index("promote_staged_payload()") < installer.index(
         "ow_sd_remove(&s_dev, LEGACY_APP_PATH)"
     )
+
+
+def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
+    gitmodules = (ROOT / ".gitmodules").read_text()
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text()
+
+    assert "github.com/freewili/wilibsp" in gitmodules
+    assert "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in release
+    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in release
+    assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in release
+    assert "native/dist/waverider_display.uf2" in release
+    assert "native/dist/waverider_installer.uf2" in release
+    assert "setup-native-ci-linux.sh" in release
+    assert "cmp build/committed-native/waverider_display.uf2" in release
+    assert "cmp build/committed-native/waverider_installer.uf2" in release
+    assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in release
+    assert "attestations: write" in release
+    assert "id-token: write" in release
+    assert "build-source-release.sh" in release
+    assert "freewili-waverider-source-*.tar.gz.sha256" in release
+    assert "Do not publish a supported binary release" in " ".join(notices.split())
+
+
+def test_exact_debian_source_and_runtime_license_notices_are_bundled():
+    source = ROOT / "vendor" / "debian-source" / "rtl-sdr-2.0.2-2"
+    for filename in (
+        "rtl-sdr_2.0.2-2.dsc",
+        "rtl-sdr_2.0.2.orig.tar.xz",
+        "rtl-sdr_2.0.2-2.debian.tar.xz",
+        "SHA256SUMS",
+        "README.md",
+    ):
+        assert (source / filename).is_file(), filename
+    for filename in (
+        "WILIBSP-MIT.txt",
+        "PICO-SDK-BSD-3-CLAUSE.txt",
+        "PICO-PIO-USB-MIT.txt",
+        "TUSB-XINPUT-MIT.txt",
+        "TINYUSB-MIT.txt",
+        "FATFS.txt",
+        "SEGGER-RTT.txt",
+    ):
+        assert (ROOT / "LICENSES" / filename).is_file(), filename
 
 
 def test_documentation_index_only_links_to_present_local_files():
@@ -136,3 +188,36 @@ def test_documentation_index_only_links_to_present_local_files():
 
     assert linked
     assert all(path.is_file() for path in linked)
+
+
+def test_public_release_archive_excludes_separate_stock_firmware_patch():
+    subprocess.run(["sh", "deploy/build-release.sh"], cwd=ROOT, check=True)
+    archive = ROOT / "dist" / "freewili-foxhunt-0.1.0.tar.gz"
+    with tarfile.open(archive, mode="r:gz") as bundle:
+        names = set(bundle.getnames())
+    prefix = "freewili-foxhunt-0.1.0/"
+    assert prefix + "tools/fw2_install_native_app.py" in names
+    assert prefix + "tools/prepare_wilibsp.py" in names
+    assert prefix + "vendor/debian-source/rtl-sdr-2.0.2-2/rtl-sdr_2.0.2-2.dsc" in names
+    assert prefix + "tools/fw2_patch_display_startup.py" not in names
+    assert prefix + "tools/fw2_set_night_defaults.py" not in names
+    assert prefix + "deploy/setup-native-ci-linux.sh" not in names
+    assert not any(".egg-info/" in name for name in names)
+    assert prefix + "docs/FW2_V07_STARTUP_PATCH.md" not in names
+    assert prefix + "docs/NIGHT_DEFAULTS.md" not in names
+    assert not any("test-beacon/" in name for name in names)
+
+
+def test_complete_source_archive_contains_pinned_submodule_contents():
+    subprocess.run(["sh", "deploy/build-source-release.sh"], cwd=ROOT, check=True)
+    archive = ROOT / "dist" / "freewili-waverider-source-0.1.0.tar.gz"
+    with tarfile.open(archive, mode="r:gz") as bundle:
+        names = set(bundle.getnames())
+    prefix = "freewili-waverider-source-0.1.0/"
+    assert prefix + "CMakeLists.txt" in names
+    assert prefix + "tools/prepare_wilibsp.py" in names
+    assert prefix + "native/patches/wilibsp-waverider.patch" in names
+    assert prefix + "wilibsp/LICENSE" in names
+    assert prefix + "wilibsp/bsp/CMakeLists.txt" in names
+    assert prefix + "wilibsp/libs/onewili/include/onewili.h" in names
+    assert prefix + ".waverider-native-source.json" in names

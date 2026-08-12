@@ -17,7 +17,7 @@ corresponding physical behavior on the connected FreeWili 2.
 | Pocket Alert haptics | With Pocket Alert enabled, a below-to-above threshold crossing produces exactly three pulses; a steady carrier does not repeat, another crossing inside 30 seconds is suppressed, and a crossing after both cooldown and 3 dB re-arm alerts again. Settings survive restart. | On FX0177 v07, manual Test, a -65 to -8 dBFS RF crossing, no-repeat under steady carrier, a second crossing after 30-second cooldown plus 3 dB re-arm, persisted disabled/-40 dBFS state across service restart, and disabled-mode suppression all passed physically on 2026-08-11. Display GPIO35 drives three 150 ms pulses / 80 ms gaps without interrupting SDR or CM0. See `docs/HAPTIC_EVIDENCE.md`. | **Proven on FX0177 v07; additional board revisions remain unverified** |
 | Automatic CM0 Linux startup | Launch WaveRider from the stock Apps menu after a cold boot without opening Linux Terminal; CM0 service reaches live SDR/display state promptly and startup progress is truthful. | A later untouched fresh boot remained on **Waiting for SDR Data** even though CM0 sampling was live. Diagnosis isolated a retained Main `TYPE_SHELL` route. A startup-only, exact-process recovery is installed: after a 20-second grace it can hang up only the bridge-owned `login -f pi`, causing the existing bridge to send `SHELL_EXIT`; it is bounded to 90 seconds, disabled after the first successful Display connection, and inhibited during maintenance. A subsequent launch took about two minutes. The service now starts after the bridge rather than after full `multi-user.target`, SDR initialization overlaps the Display handshake, and warm launches skip redundant mailbox creation. Six dim-green subsystem milestones advance the top LEDs; the seventh means the first live row. 153 host tests pass. | **Pending timed untouched cold-boot validation** |
 | Persistent operation | After complete power removal and restoration, the Apps entry remains and the same build becomes live. | The Apps entry, stored contest list, and executable survived full power removal; the user launched WaveRider and it eventually returned to live SDR data. | Proven |
-| Reproducible public deployment | Clean release contains the final CM0/native artifacts, documentation, offline dependencies, checksums, and a safe install path. | The public prerelease `v0.1.0-beta.1` passed its checksum and prior clean-extraction gate. The current release candidate adds a clone/install quick start, documentation index, friendly `WaveRider` metadata, a fail-safe move to `/apps/Radio/waverider_display.uf2`, the documented Waterfall Span Settings control, and a bounded animated creator-credits Easter egg. All 206 host tests pass, including routed-shell detach, exact installed-hash, six-profile span, and creator-screen regressions; both native images pass the SRAM-only gate; the release archive checksum verifies; and a clean extraction passes the installer dry-run with explicit OpenOCD paths. | **Software release gates proven; physical Radio-category upgrade confirmation pending** |
+| Reproducible public deployment | Clean release contains the final CM0/native artifacts, documentation, offline dependencies, corresponding source, checksums, and a safe install/rollback path; every linked dependency permits public redistribution. | The 2026-08-12 release audit pinned WiliBSP and nested OneWili, stored reviewed compatibility patches, added exact Debian rtl-sdr corresponding source, pinned GitHub Actions, restricted the CM0 transfer manifest, excluded the separate stock-firmware patch from the WaveRider bundle, and made the native installer stage/read back/promote/restore across interrupted upgrades. Three independent clean native builds produced byte-identical UF2 files; the final Display and installer SHA-256 values are `79eb567aa46d354745ff38f4e9e5ab4e169415f6d64cd9217228b018c655eec7` and `fc35827f813ff85a2afadfde37d7356cf688988fd3886097aa1c22c103e939d8`. Repeated device and complete-source release builds are byte-identical with exact digests in generated sidecars. The complete-source archive contains the pinned submodule contents and a self-verifying content identity because GitHub's generated archive does not. Clean extraction passed checksums, corresponding-source verification, secret exclusion, and an SRAM-only dry run. The final CM0 installer also restores its complete predecessor on an interrupt during integration. On connected FW2 v07 hardware the native installer first failed closed while Main reported SD state `none`/SDFS `NO_CARD`, leaving the existing app intact. A normal vendor software restart remounted the card as `main`; the candidate then staged and byte-verified 204,288 bytes, retained the previous UF2 at `/appdata/waverider/waverider_display.previous.uf2`, promoted the new app, and Main launched `/apps/Radio/waverider_display.uf2`. The installer now renders an explicit restart-and-retry instruction for the no-card/not-mounted state. A final exact-artifact replay could not begin because the CMSIS-DAP probe was no longer exposed; standard About-screen observation remains. More importantly, the pinned public OneWili repository contains no explicit license, so WaveRider may not claim or publish a supported linked binary release until FreeWili grants redistribution permission. | **STOP SHIP: OneWili permission plus standard About observation required** |
 
 ## Public project record
 
@@ -30,14 +30,20 @@ corresponding physical behavior on the connected FreeWili 2.
   dismissed; force pushes and deletion blocked.
 - Security: secret scanning, push protection, web commit signoff, and private
   vulnerability reporting enabled.
-- Known distribution uncertainty: the checked-out public OneWili source did
-  not contain a standalone license file. WaveRider does not bundle that source;
-  redistribution rights should be confirmed with FreeWili before that boundary
-  changes.
+- Distribution blocker: the checked-out public OneWili source does not contain
+  an explicit license. WaveRider links that code into both native binaries and
+  carries a reviewed source patch, so a public supported release requires
+  written redistribution terms from FreeWili even when the OneWili checkout is
+  not copied into the release archive. This is a release-management boundary,
+  not legal advice.
 
 ## Final hands-on audit
 
-Perform these steps without a routed Linux shell attached:
+First install the exact rebuilt candidate whose hashes appear in
+`native/dist/SHA256SUMS`. Confirm **INSTALL COMPLETE**, launch it from
+**Apps → Radio → WaveRider**, then hold Page for five seconds and verify the
+standard About screen reports version `001` and the public repository URL.
+Perform the remaining steps without a routed Linux shell attached:
 
 1. On the current WaveRider screen, note the large active frequency.
 2. Add a specific frequency through the numeric editor, tune it, then remove
@@ -67,5 +73,6 @@ Perform these steps without a routed Linux shell attached:
    rather than the 147.500 history, then run the confirmation-gated Clear and
    verify that both frequency groups and hidden candidates are removed.
 
-Only after all nine observations pass should the active implementation goal be
-marked complete.
+Only after the About/upgrade check, all nine observations, and the OneWili
+redistribution gate pass should the supported release be tagged or the active
+implementation goal be marked complete.

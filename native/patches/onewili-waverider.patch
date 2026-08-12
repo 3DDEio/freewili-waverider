@@ -1,0 +1,251 @@
+diff --git a/include/onewili.h b/include/onewili.h
+index f6cf86f..42edb53 100644
+--- a/include/onewili.h
++++ b/include/onewili.h
+@@ -46,11 +46,13 @@ typedef struct ow_device {
+     char evq[OW_TEXT_EVENT_QUEUE][OW_RESP_MAX];
+     uint32_t evq_head, evq_count;
+     uint32_t dropped_text_events;
++    uint32_t timeout_ms;
+ } ow_device;
+
+ /* Sends 0x02 (reset nav to root + quiet mode). */
+ ow_status ow_open(ow_device* dev, const ow_transport* transport);
+ void ow_close(ow_device* dev);
++void ow_set_timeout(ow_device* dev, uint32_t timeout_ms);
+
+ /* Poll for a spontaneous text event "[*<id> <args>]". Non-blocking (one
+  * zero-timeout read pass). id/args receive the split line body.
+diff --git a/include/onewili_fwgui.h b/include/onewili_fwgui.h
+index c419f9b..66d93e7 100644
+--- a/include/onewili_fwgui.h
++++ b/include/onewili_fwgui.h
+@@ -24,6 +24,12 @@ ow_transport ow_fwgui_binary_transport(void);
+  * Free-running counter; never reset except by ow_open_fwgui. */
+ uint32_t ow_fwgui_dropped_frames(void);
+
++/* Diagnostics for the most recent MAIN-to-DISPLAY OneWili response frame. */
++uint32_t ow_fwgui_response_frames(void);
++size_t ow_fwgui_last_response(uint8_t *buf, size_t cap);
++uint32_t ow_fwgui_gui_command_frames(void);
++uint8_t ow_fwgui_last_gui_command(void);
++
+ /* The SDFS request/response stream as an sdfslib transport. ow_open_fwgui
+  * already binds this to the ow_sd_* API (onewili_sd.h); use it directly only
+  * to drive sdfslib yourself. Valid after ow_open_fwgui. */
+@@ -37,4 +43,14 @@ sdfs_transport_t ow_fwgui_sdfs_transport(void);
+  * and periodically, since MAIN can reboot independently of DISPLAY. */
+ void ow_fwgui_send_power_zones(uint32_t zone_mask);
+
++/* Register the board-specific handler for MAIN's authoritative FwGUI 0x6D
++ * 20-bit awake mask. The generic transport retains/retries the newest mask
++ * until the handler reports it was accepted. */
++typedef bool (*ow_fwgui_power_mask_handler)(uint32_t zone_mask);
++void ow_fwgui_set_power_mask_handler(ow_fwgui_power_mask_handler handler);
++
++typedef bool (*ow_fwgui_power_zone_handler)(uint8_t zone, bool on,
++                                             uint32_t *live_rails);
++void ow_fwgui_set_power_zone_handler(ow_fwgui_power_zone_handler handler);
++
+ #endif /* ONEWILI_FWGUI_H */
+diff --git a/src/onewili.c b/src/onewili.c
+index 7546437..2f6d9de 100644
+--- a/src/onewili.c
++++ b/src/onewili.c
+@@ -174,7 +174,7 @@ static ow_status ow__call(ow_device* dev, const char* cmd,
+     for (;;) {
+         char linebuf[OW_RESP_MAX];
+         ow_status r = ow__read_line(dev, linebuf, sizeof linebuf,
+-                                    OW_DEFAULT_TIMEOUT_MS);
++                                    dev->timeout_ms);
+         if (r != OW_OK) return r;
+         if (!linebuf[0] || !ow__is_frame(linebuf)) continue;
+         int ok = 0;
+@@ -238,6 +238,22 @@ static ow_status ow__rest_str(char** cur, char* buf, size_t cap) {
+     return OW_OK;
+ }
+
++/* Decode one whitespace-delimited string when more response fields follow.
++ * The generated app-signal getter previously used ow__rest_str here, which
++ * consumed both the returned name and numeric value and made every valid
++ * response fail with OW_ERR_PROTOCOL. */
++static ow_status ow__tok_str(char** cur, char* buf, size_t cap) {
++    char* t;
++    size_t len;
++    if (!buf || cap == 0) return OW_ERR_ARG;
++    t = ow__tok(cur);
++    if (!t) return OW_ERR_PROTOCOL;
++    len = strlen(t);
++    if (len >= cap) return OW_ERR_BUFFER;
++    memcpy(buf, t, len + 1);
++    return OW_OK;
++}
++
+ /* Some commands decode nothing - keep -Wunused-function quiet either way. */
+ typedef int ow__unused_guard;
+
+@@ -250,6 +266,7 @@ ow_status ow_open(ow_device* dev, const ow_transport* transport) {
+     dev->line_len = 0;
+     dev->evq_head = dev->evq_count = 0;
+     dev->dropped_text_events = 0;
++    dev->timeout_ms = OW_DEFAULT_TIMEOUT_MS;
+     {
+         const uint8_t reset[2] = {0x02, '\n'};
+         if (dev->t.write(dev->t.ctx, reset, 2) < 0) return OW_ERR_IO;
+@@ -263,6 +280,10 @@ void ow_close(ow_device* dev) {
+     (void)dev->t.write(dev->t.ctx, reset, 1);
+ }
+
++void ow_set_timeout(ow_device* dev, uint32_t timeout_ms) {
++    if (dev != NULL) dev->timeout_ms = timeout_ms ? timeout_ms : 1u;
++}
++
+ int ow_poll_text_line(ow_device* dev, char* id, size_t id_cap,
+                       char* args, size_t args_cap) {
+     if (!dev || !id || !args || id_cap == 0 || args_cap == 0)
+@@ -5878,7 +5899,7 @@ ow_status ow_scripting_app_signals_app_signal_get(ow_device* dev, const char* na
+     if ((r = ow__cat_str(cmd, sizeof cmd, &pos, name)) != OW_OK) return r;
+     if ((r = ow__call(dev, cmd, resp, sizeof resp)) != OW_OK) return r;
+     char* cur = resp;
+-    if ((r = ow__rest_str(&cur, name_out, name_out_cap)) != OW_OK) return r;
++    if ((r = ow__tok_str(&cur, name_out, name_out_cap)) != OW_OK) return r;
+     { double v; if ((r = ow__tok_double(&cur, &v)) != OW_OK) return r;
+       if (value) *value = v; }
+     return OW_OK;
+diff --git a/src/onewili_fwgui.c b/src/onewili_fwgui.c
+index a4a40fe..09e6844 100644
+--- a/src/onewili_fwgui.c
++++ b/src/onewili_fwgui.c
+@@ -24,6 +24,8 @@
+ #define OWFW_CMD_RESPONSE  0x5D    /* FWGUI_API_ONEWILL_RESPONSE    */
+ #define OWFW_CMD_BINARY    0x5E    /* FWGUI_API_ONEWILL_BINARY      */
+ #define OWFW_CMD_SDFS      0x5F    /* FWGUI_API_SDFS_DATA           */
++#define OWFW_CMD_ZONE_SET  0x6C    /* FWGUI_API_POWER_ZONE_SET      */
++#define OWFW_CMD_ZONES_SET 0x6D    /* FWGUI_API_SET_POWER_ZONES     */
+ #define OWFW_SDFS_SLOTS    8       /* SDFS RX frames buffered       */
+ #define OWFW_SDFS_POLL_US  1000    /* an idle recv poll costs ~1 ms */
+ #define OWFW_STREAM_MAX    1024    /* per-stream buffer             */
+@@ -38,6 +40,18 @@ typedef struct {
+ static owfw_fifo g_text;     /* 0x5D: responses + "[*" text events */
+ static owfw_fifo g_binary;   /* 0x5E: binary WILI event bytes      */
+ static uint32_t  g_dropped;
++static uint8_t   g_last_response[128];
++static uint32_t  g_last_response_len;
++static uint32_t  g_response_frames;
++static uint32_t  g_pending_main_power_mask;
++static int       g_pending_main_power;
++static ow_fwgui_power_mask_handler g_power_mask_handler;
++static ow_fwgui_power_zone_handler g_power_zone_handler;
++static uint8_t   g_pending_zone;
++static int       g_pending_zone_on;
++static int       g_pending_zone_set;
++static uint32_t  g_gui_command_frames;
++static uint8_t   g_last_gui_command;
+
+ static void fifo_push_frame(owfw_fifo* f, const uint8_t* p, uint32_t n) {
+     if (n > OWFW_STREAM_MAX - f->count) { g_dropped++; return; }  /* drop-newest, whole frame */
+@@ -120,9 +134,38 @@ static void rx_byte(uint8_t b) {
+     case RX_CK1:
+         g_rx.ck |= (uint16_t)(b << 8);
+         if (g_rx.ck == g_rx.sum && !g_rx.overlong) {
+-            if (g_rx.cmd == OWFW_CMD_RESPONSE) fifo_push_frame(&g_text, g_rx.payload, g_rx.len);
++            if (g_rx.cmd != OWFW_CMD_RESPONSE &&
++                g_rx.cmd != OWFW_CMD_BINARY &&
++                g_rx.cmd != OWFW_CMD_SDFS) {
++                ++g_gui_command_frames;
++                g_last_gui_command = g_rx.cmd;
++            }
++            if (g_rx.cmd == OWFW_CMD_RESPONSE) {
++                g_response_frames++;
++                g_last_response_len = g_rx.len < sizeof g_last_response
++                                          ? g_rx.len
++                                          : sizeof g_last_response;
++                memcpy(g_last_response, g_rx.payload, g_last_response_len);
++                fifo_push_frame(&g_text, g_rx.payload, g_rx.len);
++            }
+             else if (g_rx.cmd == OWFW_CMD_BINARY) fifo_push_frame(&g_binary, g_rx.payload, g_rx.len);
+             else if (g_rx.cmd == OWFW_CMD_SDFS) sdfs_push(g_rx.payload, g_rx.len);
++            else if (g_rx.cmd == OWFW_CMD_ZONE_SET && g_rx.len == 2u) {
++                g_pending_zone = g_rx.payload[0];
++                g_pending_zone_on = g_rx.payload[1] != 0u;
++                g_pending_zone_set = 1;
++            }
++            else if (g_rx.cmd == OWFW_CMD_ZONES_SET && g_rx.len >= 4u) {
++                /* v07 Main wraps the uint32_t mask in a 10-byte command
++                 * payload; older firmware sends the bare four bytes. The
++                 * little-endian prefix is the mask in both forms. */
++                g_pending_main_power_mask =
++                    (uint32_t)g_rx.payload[0] |
++                    ((uint32_t)g_rx.payload[1] << 8) |
++                    ((uint32_t)g_rx.payload[2] << 16) |
++                    ((uint32_t)g_rx.payload[3] << 24);
++                g_pending_main_power = 1;
++            }
+             /* every other command code (GUI traffic) is discarded */
+         }
+         g_rx.st = RX_SYNC0;
+@@ -133,6 +176,24 @@ static void rx_byte(uint8_t b) {
+ static void owfw_pump(void) {
+     while (uart_is_readable(uart0))
+         rx_byte((uint8_t)uart_getc(uart0));
++    if (g_pending_main_power && g_power_mask_handler != NULL) {
++        if (g_power_mask_handler(g_pending_main_power_mask)) {
++            /* Event 48 is MAIN's completion/readback surface for both the
++             * single-zone and whole-mask commands. Include the control bits
++             * from the authoritative mask; sending only the 17 rail bits
++             * makes MAIN conclude that CM0_RUNPG is still held. */
++            ow_fwgui_send_power_zones(g_pending_main_power_mask);
++            g_pending_main_power = 0;
++        }
++    }
++    if (g_pending_zone_set && g_power_zone_handler != NULL) {
++        uint32_t rails = 0;
++        if (g_power_zone_handler(g_pending_zone, g_pending_zone_on != 0,
++                                 &rails)) {
++            ow_fwgui_send_power_zones(rails);
++            g_pending_zone_set = 0;
++        }
++    }
+ }
+
+ /* ── TX: wrap command bytes into marked M_TERM_INPUT event frames ──────── */
+@@ -257,6 +318,12 @@ ow_status ow_open_fwgui(ow_device* dev) {
+     memset(g_sdfs, 0, sizeof g_sdfs);
+     g_sdfs_head = g_sdfs_count = 0;
+     g_dropped = 0;
++    g_last_response_len = 0;
++    g_response_frames = 0;
++    g_pending_main_power = 0;
++    g_pending_zone_set = 0;
++    g_gui_command_frames = 0;
++    g_last_gui_command = 0;
+     uart_init(uart0, 8000000);   /* OWFW_BAUD */
+     gpio_set_function(OWFW_PIN_TX,  GPIO_FUNC_UART);
+     gpio_set_function(OWFW_PIN_RX,  GPIO_FUNC_UART);
+@@ -284,6 +351,14 @@ ow_transport ow_fwgui_binary_transport(void) {
+ }
+
+ uint32_t ow_fwgui_dropped_frames(void) { return g_dropped; }
++uint32_t ow_fwgui_response_frames(void) { return g_response_frames; }
++size_t ow_fwgui_last_response(uint8_t *buf, size_t cap) {
++    size_t n = g_last_response_len < cap ? g_last_response_len : cap;
++    if (n != 0 && buf != NULL) memcpy(buf, g_last_response, n);
++    return n;
++}
++uint32_t ow_fwgui_gui_command_frames(void) { return g_gui_command_frames; }
++uint8_t ow_fwgui_last_gui_command(void) { return g_last_gui_command; }
+
+ /* LOCAL ADDITION — not in the generated package; re-apply after every re-copy. */
+ void ow_fwgui_send_power_zones(uint32_t zone_mask) {
+@@ -294,3 +369,11 @@ void ow_fwgui_send_power_zones(uint32_t zone_mask) {
+     };
+     owfw_send_event(OWFW_EVT_POWER_ZONES, payload, 3);
+ }
++
++void ow_fwgui_set_power_mask_handler(ow_fwgui_power_mask_handler handler) {
++    g_power_mask_handler = handler;
++}
++
++void ow_fwgui_set_power_zone_handler(ow_fwgui_power_zone_handler handler) {
++    g_power_zone_handler = handler;
++}

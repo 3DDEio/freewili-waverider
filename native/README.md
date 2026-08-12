@@ -17,11 +17,20 @@ WiliBSP's `check_app_uf2.py` before packaging. The host installer additionally
 rejects ELF segments outside FreeWili's volatile SRAM and PSRAM windows and
 uses OpenOCD `load_image`/`verify_image`, not `program`.
 
-Build from the pinned WiliBSP checkout:
+Build from the pinned WiliBSP submodule with Pico SDK 2.3.0 and Arm GNU
+Toolchain 14.2.Rel1:
 
 ```text
-CMAKE_BIN=/path/to/cmake sh deploy/build-native-apps.sh
+git submodule update --init --recursive
+export PICO_SDK_PATH=/path/to/pico-sdk-2.3.0
+export PICO_TOOLCHAIN_PATH=/path/to/arm-gnu-toolchain-14.2.Rel1
+sh deploy/build-native-apps.sh
 ```
+
+`tools/prepare_wilibsp.py` verifies the exact WiliBSP and nested OneWili
+commits before applying the reviewed patches in `native/patches/`. It refuses
+unreviewed dependency drift. The build deliberately omits the optional SDK
+compile date so identical pinned sources produce comparable release UF2 files.
 
 Install on hardware with the built-in CMSIS-DAP probe connected:
 
@@ -34,4 +43,6 @@ Wait for **INSTALL COMPLETE**, then hold Home for five seconds. WaveRider will
 be available under `/apps/Radio/waverider_display.uf2` as
 **Apps → Radio → WaveRider**. A verified upgrade removes the former
 `/apps/waverider/waverider_display.uf2` copy so the menu does not retain a
-duplicate legacy entry.
+duplicate legacy entry. Upgrade writes a separate candidate, reads every byte
+back, retains the prior app under `/appdata/waverider/`, and restores it if
+promotion or final verification fails.

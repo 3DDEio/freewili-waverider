@@ -18,6 +18,8 @@ All notable public changes to WaveRider are recorded here. The format follows
   25 kHz through 2 MHz profiles with per-frequency persistence.
 - A hidden, animated cyber-RF creator-credits screen for KO6FQY and KO6FQJ,
   with bounded display time and immediate key/touch dismissal.
+- Pinned WiliBSP/OneWili external-app source with reviewed WaveRider patches,
+  exact Debian rtl-sdr corresponding source, and local third-party notices.
 
 ### Changed
 
@@ -35,6 +37,36 @@ All notable public changes to WaveRider are recorded here. The format follows
   exactly rather than by substring.
 - Pocket Alert and the opt-in FX0177 v07 quiet/dark startup documentation now
   match the physically verified hardware behavior.
+- Native app upgrades now use a byte-verified staging file, retain the previous
+  UF2, restore it on failure, and recover safely after interruption between
+  rename operations.
+- Public and CM0 install packages use explicit contents; the WaveRider archive
+  excludes the separate stock-firmware quiet/dark modification.
+- Release automation pins Actions, accepts only version-matching tags already
+  contained in protected `main`, validates SRAM-only UF2 files, and attaches
+  both installable UF2 artifacts directly.
+- CI and tag publication now provision checksum-pinned native build tools,
+  rebuild both UF2s from the checked-out source, and require byte-for-byte
+  equality with the committed release artifacts.
+- Public archives, UF2 files, and checksums receive GitHub/Sigstore build-
+  provenance attestations tied to the protected tagged commit.
+- Device-install archives now use normalized timestamps and ownership, omit
+  locally generated Python metadata, and reproduce byte-for-byte from the same
+  release inputs.
+- Releases now attach a deterministic complete-source archive containing the
+  pinned WiliBSP and nested OneWili trees instead of relying on GitHub's
+  submodule-incomplete generated source download.
+- CM0 upgrades now verify the exact bundled RTL-SDR packages, compile a staged
+  runtime, promote the complete tree atomically, and retain one predecessor.
+- CM0 integration upgrades now restore the preceding runtime, command wrappers,
+  and systemd units after either an install failure or an interrupted upgrade,
+  preventing mixed-version recovery states.
+
+### Release blockers
+
+- The pinned public OneWili checkout has no explicit license. A supported
+  binary release remains blocked until FreeWili provides redistribution terms
+  for the linked library and WaveRider's corresponding patch.
 
 ### Field validation
 

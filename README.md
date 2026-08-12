@@ -9,8 +9,10 @@ RTL2832U/R820T USB receiver into a receive-only 2 m / 70 cm field instrument.
 
 https://hackerwarehouse.com/product/rtlsdr/
 
-WaveRider is currently beta software for FreeWili 2. Read the limitations below
-before relying on it in a field event.
+WaveRider is a supported release candidate for FreeWili 2. Read the limitations
+below before relying on it in a field event. Publication remains blocked until
+FreeWili explicitly licenses the linked OneWili dependency for redistribution;
+see [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Important current limitations
 
@@ -131,7 +133,7 @@ as **Apps → Radio → WaveRider**.
    before creating the environment:
 
    ```text
-   git clone https://github.com/3DDEio/freewili-waverider.git
+   git clone --recurse-submodules https://github.com/3DDEio/freewili-waverider.git
    cd freewili-waverider
    python3 --version
    python3 -m venv .venv
@@ -165,20 +167,41 @@ as **Apps → Radio → WaveRider**.
    USB controller; that is expected. Return to the home screen and open
    **Apps → Radio → WaveRider**.
 
+The installer stages and reads back every byte before promotion. On upgrade it
+retains the previous Apps-menu UF2 at
+`/appdata/waverider/waverider_display.previous.uf2` and automatically restores
+it if promotion or final verification fails. The CM0 installer separately
+checksum-verifies its pinned RTL-SDR packages, promotes a fully compiled runtime
+directory in one rename, and retains the prior runtime at
+`/opt/freewili-foxhunt.previous` for rollback inspection.
+
 For OpenOCD overrides, maintenance recovery, and release verification, see the
 [deployment guide](docs/DEPLOYMENT.md).
 
+### Uninstall
+
+Return the CM0 to maintenance mode, then run `sudo sh uninstall.sh`. By default
+this keeps saved lists, settings, and message history; add `--purge` to remove
+that CM0 data. The native Apps-menu UF2 is stored separately on the Main SD and
+is not removed by the Linux script. WiliBSP currently provides `install-app`
+but no matching remove command, so delete
+`/apps/Radio/waverider_display.uf2` only through a supported Main-SD file view.
+Do not rewrite Display firmware to uninstall WaveRider.
+
 ## Install from a release
 
-The installer is offline-capable and does not replace FreeWili firmware.
+The downloaded bundle contains every package sent to the CM0, so that device
+installation can run without an Internet connection. Prepare the host first:
+the archive does not vendor Python itself, `pyserial`, or the RP2350-capable
+OpenOCD executable. The installer does not replace FreeWili firmware.
 
 1. Boot the CM0 in its normal maintenance/serial-console profile.
 2. Download and extract the [latest WaveRider release](https://github.com/3DDEio/freewili-waverider/releases/latest)
    on Windows, macOS, or Linux.
-3. Install the host-side installer and image-transfer dependencies:
+3. Before going offline, install the host-side serial dependency:
 
    ```text
-   python3 -m pip install 'pyserial>=3.5,<4' 'freewili>=0.0.51,<1'
+   python3 -m pip install 'pyserial>=3.5,<4'
    ```
 
 4. Install the native WaveRider Apps-menu application with the built-in
@@ -212,14 +235,24 @@ receiver mode routes it to the Linux USB Host socket. The first receiver boot is
 guarded for two minutes. If the SDR and on-device display do not both become
 live, the installer restores maintenance mode and the serial console returns.
 
+Each supported release also attaches a separate
+`freewili-waverider-source-<version>.tar.gz`. Unlike GitHub's automatically
+generated tag archive, it contains the exact pinned WiliBSP and nested OneWili
+source needed for an offline native rebuild. This complete-source artifact is
+published only after every bundled dependency's redistribution terms are
+confirmed.
+
 ## Repository layout
 
 - `src/` — CM0 Linux receiver, waterfall, Morse, settings, and bridge service.
 - `native/` — FreeWili Display app, self-installer, and pinned native artifacts.
+- `wilibsp/` — pinned official vendor BSP submodule; its reviewed WaveRider
+  compatibility changes are explicit patches under `native/patches/`.
 - `deploy/` — release builder plus serial and on-device installation scripts.
 - `config/` — default field frequencies and service configuration.
 - `docs/` — user, deployment, architecture, validation, and limitation records.
-- `tools/` — safe device diagnostics, maintenance, and verification helpers.
+- `tools/` — device diagnostics, maintenance, and verification helpers; use
+  maintainer tools only through the procedure that documents their scope.
 - `test-beacon/` — optional, separately licensed controlled RF test fixture.
 - `tests/` — host-side behavior, safety, native design, and documentation tests.
 
@@ -267,6 +300,10 @@ In New Frequency:
 
 Custom list names and descriptive labels currently require the maintenance
 console; exact frequencies can be added and removed entirely on-device.
+
+Hold **Page** for five seconds from the running app to open the standard About
+screen. It shows the on-device application version and public source URL;
+release acceptance includes checking both values on the installed UF2.
 
 ## Optional device maintenance: quiet and dark startup
 
@@ -360,15 +397,41 @@ python3 -m pip install '.[installer,dev]'
 python3 -m pytest -q tests
 ```
 
+For a native rebuild, initialize the pinned vendor source and use Raspberry Pi
+Pico SDK 2.3.0 with Arm GNU Toolchain 14.2.Rel1:
+
+```text
+git submodule update --init --recursive
+export PICO_SDK_PATH=/path/to/pico-sdk-2.3.0
+export PICO_TOOLCHAIN_PATH=/path/to/arm-gnu-toolchain-14.2.Rel1
+# Optional: use a prebuilt Picotool package instead of fetching/building it.
+export PICOTOOL_DIR=/path/to/picotool/cmake/package
+sh deploy/build-native-apps.sh
+```
+
+The build fails closed if WiliBSP/OneWili/Pico SDK/compiler versions drift,
+reapplies only the reviewed compatibility patches, rejects QSPI-targeted UF2
+blocks, and records new artifact checksums. See
+[Deployment](docs/DEPLOYMENT.md) for the complete maintainer gate.
+
 Build a GitHub release archive:
 
 ```text
 sh deploy/build-release.sh
 ```
 
-GitHub Actions verifies Python 3.11 and 3.13 on every push. Pushing a tag such
-as `v0.1.0` runs the test suite, rebuilds and verifies the offline archive, and
-publishes both the archive and checksum as a GitHub release.
+GitHub Actions verifies Python 3.11 and 3.13 on every push. A matching `v0.1.0`
+tag publishes only when its commit is already contained in protected `main`.
+The release attaches the device-install bundle, checksums, and both validated
+UF2 files directly. Rebuilds use a recursive clone of the matching Git tag;
+the install bundle is not a standalone native-source checkout. Tags must not
+be pushed until every gate in
+[Deployment](docs/DEPLOYMENT.md), including vendor redistribution permission,
+is satisfied.
+
+The official WaveRider release archive deliberately omits the independent
+FX0177 quiet/dark stock-firmware patch. That modification is not installed,
+recommended, or implied by WaveRider.
 
 See the [User guide](docs/USER_GUIDE.md),
 [Known limitations](docs/LIMITATIONS.md),
@@ -382,7 +445,8 @@ See the [User guide](docs/USER_GUIDE.md),
 WaveRider is developed in public at
 [`3DDEio/freewili-waverider`](https://github.com/3DDEio/freewili-waverider).
 The `main` branch is protected: changes are expected to arrive through pull
-requests, pass CI, and receive owner review. See [Contributing](CONTRIBUTING.md)
+requests, pass Python 3.11/3.13 plus native source-to-UF2 CI, and receive owner
+review. See [Contributing](CONTRIBUTING.md)
 and the [Security policy](SECURITY.md). The repository's pre-public work is
 recorded honestly in [Project history](HISTORY.md); it is a reconstructed
 milestone record, not fabricated Git history.
@@ -393,7 +457,7 @@ WaveRider was created by **KO6FQY** and **KO6FQJ**, with contributions from
 the WaveRider community. The device also contains a small animated creator
 credit for curious operators to discover.
 
-## Current beta boundary
+## Current support boundary
 
 The RTL-SDR capture, persistence, health reporting, recovery profiles, native
 screen, exact-frequency editor, all five context buttons, D-pad/Check tuning,
