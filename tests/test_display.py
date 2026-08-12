@@ -282,6 +282,32 @@ class FakeSignalTransport:
         return [SimpleNamespace(success=True, response="Ok") for _ in commands]
 
 
+class WarmSignalTransport(FakeSignalTransport):
+    def wait_frame(self, timeout=2.0):
+        del timeout
+        if self.last_command == "s\\i\\g wr_proto":
+            response = "wr_proto 1.000"
+        elif self.last_command == "s\\i\\g wr_ack":
+            response = "wr_ack 7.000"
+        else:
+            response = "Ok"
+        return SimpleNamespace(success=True, response=response)
+
+
+def test_native_display_warm_connect_skips_redundant_signal_creation():
+    transport = WarmSignalTransport()
+    display = NativeSignalDisplay(lambda: transport)
+
+    display.connect()
+
+    assert not any(command.startswith("s\\i\\a ") for command in transport.commands)
+    assert transport.commands[:2] == ["s\\i\\g wr_proto", "s\\i\\g wr_ack"]
+    assert transport.batches[-1] == [
+        "s\\i\\s wr_ready 1.000",
+        "s\\i\\s wr_state 1.000",
+    ]
+
+
 def test_native_display_packs_twelve_bins_into_three_exact_signal_words():
     transport = FakeSignalTransport()
     display = NativeSignalDisplay(lambda: transport)
@@ -310,6 +336,77 @@ def test_native_display_packs_twelve_bins_into_three_exact_signal_words():
     ]
     assert len(packed) == 3
     assert all(0 <= value <= 0xFFFF for value in packed)
+
+
+def test_native_display_frames_decoded_message_without_allocating_more_signals():
+    transport = FakeSignalTransport()
+    display = NativeSignalDisplay(lambda: transport)
+    display.connect()
+    entry = SimpleNamespace(frequency_hz=147_500_000, span_hz=100_000)
+    display.update_receiver(entry, -42.5, 0.0)
+    display.show_message(
+        "KO6FQY JOIN",
+        frequency_hz=147_500_000,
+        repeat_count=1,
+        observed_unix=0,
+    )
+
+    display.push_waterfall([0] * 12)
+    first = transport.batches[-1]
+    metadata = 22 | (0 << 8) | (4 << 16)
+    frequency_khz = 147_500
+    header = frequency_khz.to_bytes(4, "little") + bytes((1, 100))
+    assert first == [
+        f"s\\i\\s wr_freq {metadata}.000",
+        "s\\i\\s wr_span 0.000",
+        f"s\\i\\s wr_row0 {(header[0] | header[1] << 8)}.000",
+        f"s\\i\\s wr_row1 {(header[2] | header[3] << 8)}.000",
+        f"s\\i\\s wr_row2 {(header[4] | header[5] << 8)}.000",
+        "s\\i\\s wr_seq 1.000",
+    ]
+
+    display.update_receiver(entry, -42.0, 0.0)
+    assert transport.batches[-1] == [
+        "s\\i\\s wr_freq 147500000.000",
+        "s\\i\\s wr_span 100000.000",
+    ]
+    display.push_waterfall([0] * 12)
+    second = transport.batches[-1]
+    assert "s\\i\\s wr_span 0.000" in second
+    assert second[-1] == "s\\i\\s wr_seq 2.000"
+
+
+def test_native_display_marks_history_replay_without_triggering_live_popup():
+    transport = FakeSignalTransport()
+    display = NativeSignalDisplay(lambda: transport)
+    display.connect()
+    entry = SimpleNamespace(frequency_hz=446_100_000, span_hz=100_000)
+    display.update_receiver(entry, -60.0, 0.0)
+    display.show_message(
+        "W6ABC FOX",
+        confidence=0.87,
+        frequency_hz=446_100_000,
+        repeat_count=3,
+        observed_unix=1_800_000_000,
+        replay=True,
+    )
+
+    display.push_waterfall([0] * 12)
+
+    frame = transport.batches[-1]
+    assert "s\\i\\s wr_span 1.000" in frame
+    words = [
+        int(float(command.rsplit(" ", 1)[1]))
+        for command in frame
+        if " wr_row" in command
+    ]
+    payload = bytes(
+        byte
+        for word in words
+        for byte in (word & 0xFF, (word >> 8) & 0xFF)
+    )
+    assert int.from_bytes(payload[:4], "little") == 446_100
+    assert payload[4:6] == bytes((3, 87))
 
 
 def test_native_display_publishes_tuning_state_only_when_it_changes():
@@ -351,6 +448,18 @@ def test_native_display_decodes_direct_button_and_list_selection_commands():
     assert transport.batches[-1] == ["s\\i\\s wr_ack 2.000"]
     display._next_command_poll = 0
     assert display.poll_action() is None
+
+
+def test_native_display_decodes_confirmed_message_history_clear():
+    transport = FakeSignalTransport()
+    display = NativeSignalDisplay(lambda: transport)
+    display.connect()
+
+    transport.command_value = (1 << 8) | 1
+    display._next_command_poll = 0
+
+    assert display.poll_action() == "messages_clear"
+    assert transport.batches[-1] == ["s\\i\\s wr_ack 1.000"]
 
 
 def test_native_display_decodes_library_management_commands():

@@ -10,6 +10,7 @@ import threading
 import time
 
 from .models import FrequencyEntry
+from .morse import DecodedMessage, NfmMorseDecoder
 from .rtl_power import GAIN_DB_BY_PROFILE
 from .spectrum import SpectrumRow
 
@@ -126,6 +127,8 @@ class RtlIqStream:
         self.library = library
         self._configure_api()
         self.rows: queue.Queue[SpectrumRow | Exception] = queue.Queue(maxsize=2)
+        self.messages: queue.Queue[DecodedMessage] = queue.Queue(maxsize=4)
+        self.morse_decoder = NfmMorseDecoder()
         self.reader: threading.Thread | None = None
         self.device = ctypes.c_void_p()
         self.stop_event = threading.Event()
@@ -170,6 +173,9 @@ class RtlIqStream:
         self.stop()
         while not self.rows.empty():
             self.rows.get_nowait()
+        while not self.messages.empty():
+            self.messages.get_nowait()
+        self.morse_decoder.reset()
         entry.validate()
         self.entry = entry
         self.sample_rate_hz = self.sample_rate_for(entry.span_hz)
@@ -203,6 +209,11 @@ class RtlIqStream:
             self.rows.get_nowait()
         self.rows.put_nowait(item)
 
+    def _publish_message(self, item: DecodedMessage) -> None:
+        if self.messages.full():
+            self.messages.get_nowait()
+        self.messages.put_nowait(item)
+
     def _read_loop(self) -> None:
         assert self.entry is not None
         buffer = ctypes.create_string_buffer(self.read_bytes)
@@ -218,15 +229,23 @@ class RtlIqStream:
                 )
                 if read.value < FFT_SIZE * 2:
                     continue
+                payload = buffer.raw[: read.value]
                 self._publish(
                     analyze_iq(
-                        buffer.raw[: read.value],
+                        payload,
                         self.tuner_center_hz,
                         self.entry.frequency_hz,
                         self.sample_rate_hz,
                         self.entry.span_hz,
                     )
                 )
+                for message in self.morse_decoder.feed_iq(
+                    payload,
+                    self.sample_rate_hz,
+                    self.tuner_center_hz,
+                    self.entry.frequency_hz,
+                ):
+                    self._publish_message(message)
                 remaining = TARGET_PERIOD_SECONDS - (time.monotonic() - started)
                 if remaining > 0:
                     self.stop_event.wait(remaining)

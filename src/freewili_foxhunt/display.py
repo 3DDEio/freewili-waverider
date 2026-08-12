@@ -46,6 +46,19 @@ class NullDisplay:
     def push_waterfall(self, bins: list[int]) -> None:
         return
 
+    def show_message(
+        self,
+        text: str,
+        confidence: float = 1.0,
+        *,
+        frequency_hz: int | None = None,
+        repeat_count: int = 1,
+        observed_unix: float | None = None,
+        replay: bool = False,
+    ) -> None:
+        del text, confidence, frequency_hz, repeat_count, observed_unix, replay
+        return
+
     def poll_action(self) -> str | None:
         return None
 
@@ -791,6 +804,7 @@ class NativeSignalDisplay:
         self._library_notice = 0
         self._alert_enabled = False
         self._alert_threshold_dbfs = -50
+        self._message_frames: deque[tuple[int, int, tuple[int, int, int]]] = deque()
 
     def _call(self, command: str, *, required: bool = True) -> Any | None:
         if self._transport is None:
@@ -845,14 +859,17 @@ class NativeSignalDisplay:
         try:
             transport.open()
             self._transport = transport
-            # App signals survive a service restart. Add is deliberately
-            # best-effort so reconnecting to an existing mailbox is normal.
-            for name in self.SIGNAL_NAMES:
-                self._call(f"s\\i\\a {name}", required=False)
+            # App signals survive CM0 service restarts and ordinary app
+            # relaunches. Probe the protocol marker first so a warm launch
+            # avoids 32 redundant mailbox round trips. A truly cold Main boot
+            # has no marker, so create the complete mailbox best-effort.
+            protocol = self._get("wr_proto")
+            if protocol is None or protocol < 1:
+                for name in self.SIGNAL_NAMES:
+                    self._call(f"s\\i\\a {name}", required=False)
             # Protocol v1 makes native button commands durable across a CM0
             # service reconnect. On the first upgrade only, acknowledge the
             # legacy command already in the mailbox so it is not replayed.
-            protocol = self._get("wr_proto")
             if protocol is None or protocol < 1:
                 command = int(round(self._get("wr_cmd") or 0.0))
                 self._last_command_sequence = command >> 8
@@ -971,6 +988,67 @@ class NativeSignalDisplay:
             packed |= nibble << (index * 4)
         return packed
 
+    @staticmethod
+    def _pack_text_word(first: int, second: int) -> int:
+        return (first & 0xFF) | ((second & 0xFF) << 8)
+
+    def show_message(
+        self,
+        text: str,
+        confidence: float = 1.0,
+        *,
+        frequency_hz: int | None = None,
+        repeat_count: int = 1,
+        observed_unix: float | None = None,
+        replay: bool = False,
+    ) -> None:
+        if frequency_hz is None:
+            frequency_hz = (
+                self._pending_entry.frequency_hz
+                if self._pending_entry is not None
+                else self._published_frequency_hz or 0
+            )
+        if observed_unix is None:
+            observed_unix = time.time()
+        seen = time.strftime("%H:%M", time.localtime(observed_unix)).encode("ascii")
+        header = (
+            max(0, frequency_hz // 1000).to_bytes(4, "little")
+            + bytes(
+                (
+                    min(255, max(1, repeat_count)),
+                    min(100, max(0, round(confidence * 100))),
+                )
+            )
+            + seen
+        )
+        encoded_text = bytes(
+            ord(character) if 32 <= ord(character) <= 126 else ord("?")
+            for character in text.strip()[:79]
+        )
+        if not encoded_text:
+            return
+        encoded = header + encoded_text
+        chunks = (len(encoded) + 5) // 6
+        span_marker = 1 if replay else 0
+        frames: deque[tuple[int, int, tuple[int, int, int]]] = deque()
+        for index in range(chunks):
+            chunk = encoded[index * 6 : (index + 1) * 6].ljust(6, b"\0")
+            metadata = len(encoded) | (index << 8) | (chunks << 16)
+            words = (
+                self._pack_text_word(chunk[0], chunk[1]),
+                self._pack_text_word(chunk[2], chunk[3]),
+                self._pack_text_word(chunk[4], chunk[5]),
+            )
+            frames.append((span_marker, metadata, words))
+        if replay:
+            # Rehydrate recent durable history unobtrusively after a display
+            # reconnect.  Live decodes remain able to preempt this queue.
+            self._message_frames.extend(frames)
+        else:
+            # A fresh live decode supersedes old replay traffic so its popup
+            # reaches the hunter within one waterfall frame.
+            self._message_frames = frames
+
     def update_receiver(
         self,
         entry: FrequencyEntry,
@@ -997,6 +1075,26 @@ class NativeSignalDisplay:
     def push_waterfall(self, bins: list[int]) -> None:
         entry = self._pending_entry
         if entry is None:
+            return
+        if self._message_frames:
+            span_marker, metadata, words = self._message_frames.popleft()
+            self._row_sequence = (self._row_sequence + 1) & 0xFFFF
+            self._set_many(
+                [
+                    ("wr_freq", metadata),
+                    # Zero marks a live detection; one marks silent history
+                    # replay. Both are outside every valid receiver profile.
+                    ("wr_span", span_marker),
+                    ("wr_row0", words[0]),
+                    ("wr_row1", words[1]),
+                    ("wr_row2", words[2]),
+                    ("wr_seq", self._row_sequence),
+                ]
+            )
+            # The sideband temporarily overwrote tuning state. Force the next
+            # real row to restore the selected frequency and span once.
+            self._published_frequency_hz = None
+            self._published_span_hz = None
             return
         padded = (bins[: self.WATERFALL_BINS] + [0] * self.WATERFALL_BINS)[
             : self.WATERFALL_BINS
@@ -1034,6 +1132,8 @@ class NativeSignalDisplay:
         # native side leaves wr_cmd intact, so reconnecting before this write
         # causes the command to be retried instead of erased.
         self._set_many([("wr_ack", sequence)])
+        if opcode == 0 and argument == 1:
+            return "messages_clear"
         if opcode == 6:
             return f"select:{argument}"
         if opcode == 1:
