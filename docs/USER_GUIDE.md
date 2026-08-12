@@ -17,10 +17,11 @@ The top LEDs communicate startup state:
 - Flashing yellow: receiver data is missing or stale. Read the on-screen status
   page for the cause and next action.
 
-Pocket Alert turns off the single front status LED above Home and automatically
-reduces the seven-LED top strip to one eighth of normal brightness. The top
-strip retains the same readiness, fault, and RSSI colors. Leaving Pocket Alert
-restores the front status LED to its prior state.
+Pocket Alert automatically reduces the seven-LED top strip to one eighth of
+normal brightness while retaining the same readiness, fault, and RSSI colors.
+The separate front status LED above Home remains unchanged because current
+firmware exposes it only through a complete power-mask operation that is unsafe
+to rebuild from a live snapshot.
 
 Cold Linux startup can take longer than a warm relaunch. The screen remains
 interactive and the list can be browsed while WaveRider waits.

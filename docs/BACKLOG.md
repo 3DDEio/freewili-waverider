@@ -255,9 +255,11 @@ Brand migration begins after the connected device demonstrates:
 - [x] Finish the current release-candidate repository pass: keep stable source
   paths, add a browsable documentation index and repository map, document the
   clone/install flow, rebuild the friendly Radio-category native artifacts,
-  and pass host/native/archive validation. The pass completed with 199 host
+  and pass host/native/archive validation. The pass completed with 201 host
   tests, both SRAM-only native gates, archive checksum validation, and a clean
-  extraction dry-run. Publication still follows the protected `main` PR flow.
+  extraction dry-run. Review also corrected the front-LED/quiet-start docs and
+  hardened boot-recovery verification so every routed shell detaches and hashes
+  compare exactly. Publication still follows the protected `main` PR flow.
 - [x] Constrain waterfall plot values to FW2's documented 0..100 plot scale.
   The previous 0..255 encoder caused v07 to reject `g\\e\\f` values above 100 as
   `Invalid`, leaving a partially staged hot/yellow row and a static panel. The

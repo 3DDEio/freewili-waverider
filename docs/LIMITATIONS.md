@@ -146,13 +146,17 @@ console.
 temporary, and the startup voice cannot be disabled from the visible Settings
 screens.
 
-**Current status:** There is no verified FW2 v07 workaround yet. A backed-up
-debug-probe experiment wrote and remounted a `settings.txt` containing
+**Current status:** The ordinary settings-file method has no effect on FW2
+v07. A backed-up debug-probe experiment wrote and remounted a `settings.txt` containing
 `sndvol=0`, `sndsys=0`, and `lshowdef=0`, but a full power cycle still produced
 the LED show and spoken boot clip. Runtime inspection then showed the effective
 `sndsys` value was still the compiled factory default (`1`). The helper now
 refuses the v07 write path. The legacy serial-menu method is for
-first-generation FreeWili hardware only.
+first-generation FreeWili hardware only. A separate, opt-in, version-locked
+Display effect-point patch is physically proven to suppress both effects on
+the connected FX0177 v07 unit, with stock recovery retained. It is not part of
+WaveRider installation and refuses any unverified stock firmware hash; see
+`docs/NIGHT_DEFAULTS.md`.
 
 ## Receiver USB and maintenance serial are mutually exclusive
 
