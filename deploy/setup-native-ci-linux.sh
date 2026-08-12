@@ -29,6 +29,17 @@ esac
 rm -rf "$TOOL_ROOT"
 mkdir -p "$TOOL_ROOT"
 
+download() {
+    url=$1
+    destination=$2
+    # Resume transiently interrupted transfers and retry connection, timeout,
+    # and HTTP 5xx failures. Publisher hashes below remain authoritative.
+    curl --fail --location --silent --show-error \
+        --retry 12 --retry-all-errors --retry-delay 2 \
+        --connect-timeout 30 --continue-at - \
+        "$url" --output "$destination"
+}
+
 git clone --branch 2.3.0 --depth 1 --recurse-submodules --shallow-submodules \
     https://github.com/raspberrypi/pico-sdk.git "$SDK_DIR"
 found_sdk=$(git -C "$SDK_DIR" rev-parse HEAD)
@@ -37,16 +48,16 @@ if [ "$found_sdk" != "$SDK_COMMIT" ]; then
     exit 1
 fi
 
-curl --fail --location --silent --show-error \
+download \
     "https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/$TOOLCHAIN_ARCHIVE" \
-    --output "$TOOL_ROOT/$TOOLCHAIN_ARCHIVE"
+    "$TOOL_ROOT/$TOOLCHAIN_ARCHIVE"
 printf '%s  %s\n' "$TOOLCHAIN_SHA256" "$TOOL_ROOT/$TOOLCHAIN_ARCHIVE" | \
     sha256sum -c -
 tar -xJf "$TOOL_ROOT/$TOOLCHAIN_ARCHIVE" -C "$TOOL_ROOT"
 
-curl --fail --location --silent --show-error \
+download \
     "https://github.com/raspberrypi/pico-sdk-tools/releases/download/v2.3.0-0/$PICOTOOL_ARCHIVE" \
-    --output "$TOOL_ROOT/$PICOTOOL_ARCHIVE"
+    "$TOOL_ROOT/$PICOTOOL_ARCHIVE"
 printf '%s  %s\n' "$PICOTOOL_SHA256" "$TOOL_ROOT/$PICOTOOL_ARCHIVE" | \
     sha256sum -c -
 tar -xzf "$TOOL_ROOT/$PICOTOOL_ARCHIVE" -C "$TOOL_ROOT"

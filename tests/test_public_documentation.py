@@ -138,8 +138,8 @@ def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text()
 
     assert "github.com/freewili/wilibsp" in gitmodules
-    assert "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in release
-    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in release
+    assert "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09" in release
+    assert "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1" in release
     assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in release
     assert "native/dist/waverider_display.uf2" in release
     assert "native/dist/waverider_installer.uf2" in release
@@ -209,6 +209,20 @@ def test_public_release_archive_excludes_separate_stock_firmware_patch():
 
 
 def test_complete_source_archive_contains_pinned_submodule_contents():
+    before_wilibsp = subprocess.run(
+        ["git", "-C", "wilibsp", "status", "--porcelain"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    before_onewili = subprocess.run(
+        ["git", "-C", "wilibsp/libs/onewili", "status", "--porcelain"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
     subprocess.run(["sh", "deploy/build-source-release.sh"], cwd=ROOT, check=True)
     archive = ROOT / "dist" / "freewili-waverider-source-0.1.0.tar.gz"
     with tarfile.open(archive, mode="r:gz") as bundle:
@@ -221,3 +235,20 @@ def test_complete_source_archive_contains_pinned_submodule_contents():
     assert prefix + "wilibsp/bsp/CMakeLists.txt" in names
     assert prefix + "wilibsp/libs/onewili/include/onewili.h" in names
     assert prefix + ".waverider-native-source.json" in names
+    assert prefix + "tools/fw2_patch_display_startup.py" not in names
+    assert prefix + "tools/fw2_set_night_defaults.py" not in names
+    assert not any("test-beacon/" in name for name in names)
+    assert subprocess.run(
+        ["git", "-C", "wilibsp", "status", "--porcelain"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout == before_wilibsp
+    assert subprocess.run(
+        ["git", "-C", "wilibsp/libs/onewili", "status", "--porcelain"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout == before_onewili

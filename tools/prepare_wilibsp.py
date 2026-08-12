@@ -131,6 +131,11 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="write a content identity for an archive that omits Git metadata",
     )
+    parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="verify pinned source identity without applying reviewed patches",
+    )
     args = parser.parse_args(argv)
     if args.write_source_marker is not None:
         args.write_source_marker.write_text(
@@ -144,6 +149,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"native source identity: {args.write_source_marker}")
         return 0
     require_source_identity()
+    if args.verify_only:
+        print(f"WiliBSP {WILIBSP_COMMIT}")
+        print(f"OneWili {ONEWILI_COMMIT}")
+        return 0
     patches = [
         (WILIBSP, ROOT / "native/patches/wilibsp-waverider.patch"),
         (ONEWILI, ROOT / "native/patches/onewili-waverider.patch"),
