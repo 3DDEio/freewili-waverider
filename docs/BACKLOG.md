@@ -433,6 +433,24 @@ Brand migration begins after the connected device demonstrates:
   settings/Pocket Alert tests pass. Deploy this revision and resume the ten-run
   efficacy gate without concurrent Main USB mailbox probes.
 
+  **Second corrected-run finding:** three additional interference-free beacon
+  transmissions produced seven stored candidates but no verified message,
+  which correctly prevented a false popup. Tone lock remained exactly 800 Hz
+  with signal confidence 1.0; the final attempt was
+  `TTOD T KO JOE T TOA GAWTNTTKE T. EMT? TOZAOY` at confidence 0.80. Across the
+  run, candidates disagreed completely (agreement 0.0), the timing model moved
+  to 57.2 ms / about 21 WPM, and captured bands were 40/160/500 ms marks plus
+  40/80/400 ms gaps. Inspection isolated the systematic cause below the Morse
+  parser: while waiting for attack/release debounce, `_feed_tone_window`
+  assigned provisional windows to the old stable state. That compressed real
+  separators and exposed two-window 40 ms fades inside dashes as false gaps.
+  The decoder now buffers provisional windows, retroactively assigns them to
+  the state that wins debounce, requires three release windows to bridge a
+  two-window fade, and retrains persistent WPM only when timing confidence is
+  at least 0.80. Exact fade and moderate-fit regressions plus all 64 focused
+  decoder/runtime/history/settings/Pocket Alert tests pass. Deploy this second
+  revision before continuing the over-air efficacy count.
+
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel
   windows, adapts
