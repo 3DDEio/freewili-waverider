@@ -54,15 +54,19 @@ hardware observations in that audit.
   links and patches it. Do not tag a supported release based only on public
   repository visibility.
 - [x] Rebuild the finalized native source twice in clean build directories and
-  prove both UF2 hashes match; validate the resulting installer/display hashes,
-  release archive, and clean-extraction dry run. Final candidate hashes are
-  `79eb567a...` (Display UF2), `fc35827f...` (installer UF2), and
+  prove same-host UF2 hashes match; validate the resulting installer/display
+  hashes, release archive, and clean-extraction dry run. Cross-host comparison
+  exposed different newlib object ordering between Arm's macOS and Linux
+  14.2.Rel1 distributions, so GitHub's pinned Linux x86_64 job is the declared
+  canonical release builder. Two independent hosted runs produced identical
+  canonical candidates: `2a095c74...` (Display UF2), `4727e722...`
+  (installer UF2), and
   the exact deterministic device-install digest recorded in its generated
   `.tar.gz.sha256` sidecar.
 - [x] Re-run the complete supported host regression after the final rollback
   change: 212 tests pass, shell syntax and workflow YAML parse cleanly, all
-  native and Debian source manifests verify, and independent native builds
-  remain byte-identical.
+  native and Debian source manifests verify, and two independent canonical
+  Linux native builds remain byte-identical.
 - [ ] Install those exact rebuilt artifacts on FX0177, confirm staged upgrade
   plus retained backup, launch from **Apps → Radio → WaveRider**, and verify the
   standard five-second Page About screen before release. The install, backup,

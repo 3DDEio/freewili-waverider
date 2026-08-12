@@ -26,7 +26,10 @@
 
    GitHub's Linux runner uses `deploy/setup-native-ci-linux.sh` to fetch these
    same inputs from their publishers, verify their SHA-256 digests, rebuild
-   both UF2 files, and byte-compare them with the release candidates.
+   both UF2 files, and byte-compare them with the release candidates. The
+   GitHub Linux x86_64 job is the canonical binary builder: Arm's otherwise
+   matching macOS 14.2.Rel1 distribution orders some newlib objects
+   differently, so a Mac rebuild is safety-equivalent but not byte-identical.
 
 6. Build the device archive with `sh deploy/build-release.sh` and the complete
    source archive with `sh deploy/build-source-release.sh`; verify both
