@@ -31,5 +31,7 @@ python3 tools/fw2_install_native_app.py
 ```
 
 Wait for **INSTALL COMPLETE**, then hold Home for five seconds. WaveRider will
-be available under `/apps/waverider/waverider_display.uf2` in the stock Apps
-menu.
+be available under `/apps/Radio/waverider_display.uf2` as
+**Apps → Radio → WaveRider**. A verified upgrade removes the former
+`/apps/waverider/waverider_display.uf2` copy so the menu does not retain a
+duplicate legacy entry.

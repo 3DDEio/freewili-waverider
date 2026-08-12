@@ -65,7 +65,7 @@ the bridge supplies either state or event data.
 WaveRider no longer waits on a firmware relay. Its loadable Display app reads
 the same supported `uartkbd` event queue used by WiliBSP keyboard examples and
 exchanges sequence-numbered commands with CM0 through Main's existing
-app-signal service. The app targets SRAM, installs under `/apps/waverider`, and
-does not replace stock firmware. Agent-injected Green has been proven on the
+app-signal service. The app targets SRAM, installs under `/apps/Radio` as
+`WaveRider`, and does not replace stock firmware. Agent-injected Green has been proven on the
 connected display path; the release gate remains a physical Green/Check retune
 with the CM0 SDR service detached from the maintenance shell.

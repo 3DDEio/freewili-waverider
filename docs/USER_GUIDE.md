@@ -4,7 +4,7 @@
 
 1. Connect the RTL-SDR to the FreeWili 2 Linux USB Host socket.
 2. Attach an antenna appropriate for the frequency being hunted.
-3. Open **Apps** and select **WaveRider**.
+3. Open **Apps → Radio → WaveRider**.
 4. Wait for the startup page to reach live SDR data.
 
 The top LEDs communicate startup state:

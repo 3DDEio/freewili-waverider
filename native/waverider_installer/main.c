@@ -11,8 +11,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define APP_DIR  "/apps/waverider"
+#define APP_DIR  "/apps/Radio"
 #define APP_PATH APP_DIR "/waverider_display.uf2"
+#define LEGACY_APP_PATH "/apps/waverider/waverider_display.uf2"
 #define CHUNK_SIZE 1024u
 #define SD_RECLAIM_ATTEMPTS 30u
 #define SD_RECLAIM_DELAY_MS 500u
@@ -103,6 +104,12 @@ static bool install_payload(void) {
     }
     DIAG("waverider-installer: installed %s (%u bytes)\n", APP_PATH,
          (unsigned)size);
+    /* Older WaveRider builds installed at /apps/waverider. Remove that file
+     * only after the new Radio-category copy has been closed and verified so
+     * an upgrade cannot leave the user without a launchable app. */
+    ow_status legacy_status = ow_sd_remove(&s_dev, LEGACY_APP_PATH);
+    DIAG("waverider-installer: legacy cleanup %s status=%d\n",
+         LEGACY_APP_PATH, (int)legacy_status);
     return true;
 }
 

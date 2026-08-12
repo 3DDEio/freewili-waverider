@@ -101,7 +101,8 @@ waterfall rows are published while this mode is active, so the bounded
 32-signal mailbox does not grow.
 
 The native app is a normal SRAM-targeted FreeWili BSP application installed at
-`/apps/waverider/waverider_display.uf2`. It owns the 480 x 320 framebuffer,
+`/apps/Radio/waverider_display.uf2`, with embedded display name `WaveRider`.
+It owns the 480 x 320 framebuffer,
 continuous RSSI scale, waterfall centerline, button footer, and top LED meter.
 Holding Home for five seconds returns to the stock recovery loader. Main and
 Display firmware remain unchanged.
