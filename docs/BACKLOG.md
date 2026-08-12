@@ -47,8 +47,12 @@ hardware observations in that audit.
   pass exposed macOS-only tar flags and one interrupted Picotool transfer; the
   builders are now portable, downloads resume/retry under publisher hashes,
   and checkout/setup-python are pinned to their current Node 24 releases.
-- [ ] Confirm the repaired Python 3.11/3.13 and source-to-UF2 GitHub jobs pass
-  on the exact pushed release-candidate commit before merge or tag creation.
+- [x] Confirm the repaired Python 3.11/3.13 and source-to-UF2 GitHub jobs pass
+  on the exact pushed release-candidate commit. Push and pull-request runs
+  `31645372707` and `31645377362` independently passed all three gates on
+  canonical commit `ba83cdf`: Python 3.11, Python 3.13, and native release.
+  Merge/tag creation remain separately blocked by the vendor-license and
+  connected-device acceptance items below.
 - [ ] **STOP SHIP:** obtain explicit OneWili source/binary redistribution terms
   from FreeWili. The public upstream checkout has no license, and WaveRider
   links and patches it. Do not tag a supported release based only on public
