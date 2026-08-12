@@ -135,6 +135,7 @@ def test_quick_start_and_native_metadata_match_the_radio_menu_contract():
 def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     gitmodules = (ROOT / ".gitmodules").read_text()
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text()
 
     assert "github.com/freewili/wilibsp" in gitmodules
@@ -147,6 +148,7 @@ def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     assert "cmp build/committed-native/waverider_display.uf2" in release
     assert "cmp build/committed-native/waverider_installer.uf2" in release
     assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in release
+    assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in ci
     assert "attestations: write" in release
     assert "id-token: write" in release
     assert "build-source-release.sh" in release

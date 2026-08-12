@@ -60,6 +60,18 @@ jobs:
           BUILD_DIR="$GITHUB_WORKSPACE/build/ci-native" sh deploy/build-native-apps.sh
           cmp build/committed-native/waverider_display.uf2 native/dist/waverider_display.uf2
           cmp build/committed-native/waverider_installer.uf2 native/dist/waverider_installer.uf2
+      - name: Retain native comparison evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-reproducibility-evidence
+          path: |
+            build/committed-native/*.uf2
+            native/dist/*.elf
+            native/dist/*.uf2
+            native/dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
       - run: sha256sum -c native/dist/SHA256SUMS
       - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_display.uf2
       - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_installer.uf2
