@@ -295,7 +295,7 @@ Brand migration begins after the connected device demonstrates:
   connected device. Physical Page-key navigation and persistence QA remain
   open.
 
-- [ ] **NEXT FIELD GATE A — Validate Pocket Alert end to end.** Use the known
+- [x] **FIELD GATE A — Validate Pocket Alert end to end on FX0177 v07.** Use the known
   147.500 MHz KO6FQY beacon and record the quiet noise floor before choosing a
   threshold between the off-air and keyed-signal readings. A passing result
   requires all of the following on a fresh WaveRider launch:
@@ -313,7 +313,18 @@ Brand migration begins after the connected device demonstrates:
   and any SDR/bridge interruption. Do not mark Pocket Alert complete from the
   already-proven manual GPIO35 pulse alone.
 
-- [ ] Add opt-in Pocket Alert vibration for eyes-free hunting. The design uses
+  **Passed 2026-08-11:** with the beacon controlled over USB, WaveRider measured
+  approximately -64.6 dBFS off-air and -8.4 dBFS keyed. At a persisted -40 dBFS
+  threshold, manual Test produced exactly three pulses without interrupting the
+  live SDR/CM0 bridge. The first RF crossing produced exactly three pulses; a
+  continuously strong signal produced no duplicate. After the signal fell to
+  approximately -65.0 dBFS (below the -43 dBFS re-arm boundary) and the
+  30-second cooldown elapsed, the next crossing produced exactly one further
+  three-pulse alert. Disabling Pocket Alert persisted across a CM0 service
+  restart, retained the -40 dBFS threshold, and suppressed vibration during a
+  complete keyed crossing. Additional hardware revisions remain unverified.
+
+- [x] Add opt-in Pocket Alert vibration for eyes-free hunting. The design uses
   three nonblocking 150 ms pulses separated by 80 ms gaps, a fixed 30-second
   cooldown, and a 3 dB fall-and-rise re-arm
   requirement. Page or the RSSI scale opens a dedicated screen with persistent
@@ -338,8 +349,10 @@ Brand migration begins after the connected device demonstrates:
   only the motor pin, retained the 12 mA drive and three 150 ms / 80 ms pulse
   envelope, and was installed on FX0177. The user physically confirmed all
   three manual-Test pulses. WaveRider now uses the verified GPIO35 route.
-  **Remaining validation:** confirm an RF threshold crossing, 30-second
-  cooldown, 3 dB re-arm, persistence, and any additional board revisions.
+  The controlled 2026-08-11 pass above confirms the RF threshold crossing,
+  no-repeat behavior, 30-second cooldown, 3 dB re-arm, persistence, and
+  disabled-mode suppression on FX0177 v07. Other board revisions remain a
+  compatibility-validation item rather than an open implementation gate.
 
 - [ ] Complete the seven-visible-LED field feedback pass. The native Display
   app now drives only indices 0..6: all red at launch, all yellow while Linux or
@@ -382,6 +395,19 @@ Brand migration begins after the connected device demonstrates:
   If any criterion fails, retain the raw candidates, tone estimate, timing/WPM,
   confidence components, rejection reason, and signal/noise measurements for
   the next decoder iteration. Do not tune thresholds from popup text alone.
+
+  **2026-08-11 controlled-run finding:** history was cleared, CW was enabled,
+  and the low-power 147.500 MHz beacon was moved until its signal dropped from
+  near-overload (-8.4 dBFS) to a healthy -34 to -39 dBFS. WaveRider consistently
+  locked to the correct 800 Hz audio tone and retained its safe 92.3 ms / 13 WPM
+  persistent timing model, but live attempts remained garbled (`Y???T???` and
+  `???UEIEETKAX???`) and were correctly withheld. Observed mark/gap medians were
+  approximately 140/160 ms, with 40 ms fragments and 560--700 ms long runs.
+  Inspection found the CircuitPython beacon constructing and deinitializing
+  `PWMOut` for every Morse mark; that per-symbol lifecycle delay corrupts the
+  intended 92.3 ms 1:3:7 ratios. A separate beacon-firmware correction now
+  allocates PWM once and keys it by duty cycle. Install that revision and rerun
+  this gate before changing WaveRider's quality thresholds.
 
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
   tuner offset, searches a bounded NFM CW audio range in 20 ms Goertzel

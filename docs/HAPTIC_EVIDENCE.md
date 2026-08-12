@@ -91,3 +91,23 @@ through WaveRider's nonblocking pulse state machine. An
 earlier blocking sleep loop stopped servicing OneWili for the duration of the
 test and physically reproduced a lost SDR/command route on Main v07, so no
 haptic action may block the Display event loop.
+
+## End-to-end RF acceptance on FX0177 v07
+
+On 2026-08-11 the recovered KO6FQY beacon was controlled over USB while the
+user held the Wili and confirmed each physical result. WaveRider measured about
+-64.6 dBFS with the beacon off and -8.4 dBFS keyed at bench distance. With
+Pocket Alert enabled at a persisted -40 dBFS threshold:
+
+- manual Test produced exactly three pulses and SDR/CM0 remained live;
+- the first off-to-on RF crossing produced exactly three pulses;
+- a continuously strong signal produced no additional alert;
+- after returning to about -65.0 dBFS, crossing the -43 dBFS re-arm boundary,
+  and waiting beyond the 30-second cooldown, the next RF crossing produced
+  exactly one additional three-pulse alert;
+- disabling Pocket Alert persisted across a CM0 service restart together with
+  the -40 dBFS threshold; and
+- a complete strong RF crossing while disabled produced no vibration.
+
+This closes the end-to-end Pocket Alert behavior gate for the tested FX0177 v07
+unit. Other hardware revisions still need compatibility confirmation.
