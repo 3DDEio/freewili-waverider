@@ -1,7 +1,9 @@
 # FreeWili 2 haptic evidence
 
-This record explains why WaveRider drives Display GPIO46 active-high. It does
-not redistribute the installed application binaries.
+This record explains why WaveRider drives Display GPIO35 active-high. The pin
+was physically verified on a production FreeWili 2 v07 unit after older public
+material incorrectly directed development to GPIO46. This project does not
+redistribute the installed application binaries.
 
 ## Installed application inventory
 
@@ -45,41 +47,47 @@ and overlong-drive safety cutoff. Its stripped UF2 does not expose the selected
 GPIO as a plain-text constant, so Doom independently proves shipped haptic use
 but is not the source of WaveRider's pin assignment.
 
-## WaveRider decision
+## Corrected hardware decision
 
-WaveRider follows the Meshtastic behavior:
+The Meshtastic source pointer was useful for the pulse envelope, but its GPIO46
+assignment did not operate the motor on the connected production board. That
+result is also consistent with current FreeWili logic-analyzer material, which
+uses Main GPIO46 as an analog input rather than a vibration output.
 
-- Display GPIO46;
+On 2026-08-11 an independent production FW2 v07 bench trace reported the motor
+on the **Display CPU's GPIO35**. WaveRider changed only the haptic pin from 46
+to 35, keeping the bounded 12 mA drive and nonblocking three-pulse envelope.
+The connected FX0177 unit then produced all three physical pulses from the
+manual Test action. This establishes the WaveRider driver as:
+
+- Display GPIO35;
 - active-high;
 - 12 mA pad drive;
 - three nonblocking 150 ms pulses separated by 80 ms gaps;
-- 30-second alert cooldown and 3 dB fall-and-rise re-arm remain WaveRider
-  battery/nuisance protections.
-
-Physical Test, threshold crossing, cooldown, re-arm, and board-revision
-population still require observation on the connected unit before Pocket Alert
-is marked proven.
+- 30-second alert cooldown and 3 dB fall-and-rise re-arm for battery and
+  nuisance protection.
 
 ## Connected-unit results and power-rail diagnostic
 
 On 2026-08-09 the connected unit physically produced Meshtastic's three boot
 pulses. This proves that the motor is populated and functional on this unit.
-WaveRider's Pocket Alert TEST handler was then observed over RTT. It received
+WaveRider's earlier Pocket Alert TEST handler was observed over RTT. It received
 the red-button event and produced three 150 ms active-high GPIO46 pulses with
 80 ms gaps; both the SIO output latch and pad readback followed every high and
-low transition. No physical vibration was felt.
+low transition, but no physical vibration was felt. This proved the software
+waveform was correct while disproving GPIO46 as the motor route on this board.
 
 The same capture showed that WaveRider's audio power zone was off. Because the
 Meshtastic startup path initializes the audio-related board path before its
 haptic self-test, a bounded diagnostic build declared AUDIO in WaveRider's
 application power-zone metadata and kept it awake. The connected-unit TEST
 still produced no physical vibration, disproving the audio-zone hypothesis.
-WaveRider therefore no longer requests that otherwise-unused rail. The next
-diagnostic must isolate another source-backed initialization difference rather
-than add more speculative power zones or sweep arbitrary GPIOs.
+WaveRider therefore no longer requests that otherwise-unused rail. The later
+GPIO35 physical success confirms that the problem was pin assignment, not an
+audio rail or pulse-timing dependency.
 
-Manual TEST uses the same three 150 ms HIGH intervals and 80 ms LOW gaps as
-Meshtastic, scheduled through WaveRider's nonblocking pulse state machine. An
+Manual TEST uses three 150 ms HIGH intervals and 80 ms LOW gaps, scheduled
+through WaveRider's nonblocking pulse state machine. An
 earlier blocking sleep loop stopped servicing OneWili for the duration of the
 test and physically reproduced a lost SDR/command route on Main v07, so no
 haptic action may block the Display event loop.

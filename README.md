@@ -80,9 +80,9 @@ and the [User guide](docs/USER_GUIDE.md) for normal operation.
 - Seven-LED startup, ready, RSSI, and fault feedback.
 - A **Pocket Alert** status page with an adjustable threshold, three-pulse
   alert, 30-second cooldown, 3 dB re-arm hysteresis, and manual Test action.
-  Its Display GPIO46 active-high, 12 mA driver and 150/80 ms timing now match
-  the implementation shipped in FreeWili's Meshtastic port. Physical motor
-  validation remains required on the target board revision.
+  Its Display GPIO35 active-high, 12 mA driver and 150/80 ms timing are
+  physically verified on production FW2 v07 unit FX0177. Other board revisions
+  should run the manual Test before relying on Pocket Alert.
 - Plain-language startup, refresh, and receiver-fault status pages.
 - Live adaptive-pitch NFM Morse detection with an eight-second `MESSAGE DETECTED`
   overlay plus a frequency-grouped **MSGS** history. The CM0 stores 100

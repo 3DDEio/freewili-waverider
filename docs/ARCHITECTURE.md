@@ -106,9 +106,9 @@ continuous RSSI scale, waterfall centerline, button footer, and top LED meter.
 Holding Home for five seconds returns to the stock recovery loader. Main and
 Display firmware remain unchanged.
 
-Pocket Alert's sequencer runs on the Display CPU. Its GPIO46 active-high output,
-12 mA drive, and 150 ms pulse / 80 ms gap timing match the FreeWili Meshtastic
-port recovered from the installed app; the evidence and checksums are recorded
+Pocket Alert's sequencer runs on the Display CPU. Its physically verified
+GPIO35 active-high output uses a bounded 12 mA drive and 150 ms pulse / 80 ms
+gap timing; the corrected pin evidence and installed-app checksums are recorded
 in `docs/HAPTIC_EVIDENCE.md`. CM0 atomically persists the enabled flag and
 integer dBFS threshold in `pocket-alert.json`. To stay
 within Main v07's 32 named-signal

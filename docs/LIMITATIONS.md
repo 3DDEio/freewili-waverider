@@ -88,18 +88,19 @@ uses three short motor pulses, a fixed
 battery drain and nuisance vibration. A manual Test action deliberately
 bypasses the cooldown.
 
-## Pocket Alert hardware validation is still required
+## Pocket Alert board-revision coverage is limited
 
-The installed Meshtastic binary identifies FreeWili's public `freewili-port`
-source. That branch maps the motor to Display GPIO46 and drives it active-high
-at 12 mA with three 150 ms pulses separated by 80 ms. The installed Doom build
-independently contains a dedicated haptic PWM driver. WaveRider now follows the
-Meshtastic GPIO and timing exactly; see `docs/HAPTIC_EVIDENCE.md`.
+WaveRider drives the physically verified production FW2 v07 motor route:
+Display GPIO35, active-high at 12 mA, using three 150 ms pulses separated by
+80 ms. The connected FX0177 unit produced all three pulses from the manual Test
+on 2026-08-11. Older public material and a Meshtastic source branch name
+GPIO46; that route toggled electrically but did not move this board's motor.
+See `docs/HAPTIC_EVIDENCE.md`.
 
-**User impact:** source inspection clears the prior pin/waveform uncertainty,
-but it does not prove that every board revision populates the same motor or that
-the connected unit will move. Run the manual Test before relying on Pocket
-Alert. RSSI, waterfall, and LED feedback remain the authoritative fallbacks.
+**User impact:** GPIO35 is proven on the connected production v07 unit, but
+other board revisions have not been physically surveyed. Run the manual Test
+before relying on Pocket Alert. RSSI, waterfall, and LED feedback remain the
+authoritative fallbacks if a different revision does not respond.
 
 ## Waterfall resolution is optimized for field hunting
 

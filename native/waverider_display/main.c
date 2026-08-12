@@ -64,8 +64,11 @@
 #define WATERFALL_BINS 12
 #define MIN_FREQUENCY_KHZ 24000u
 #define MAX_FREQUENCY_KHZ 1766000u
-#define PIN_HAPTIC 46u
-#define HAPTIC_GPIO46_SOURCE_VERIFIED 1u
+#define PIN_HAPTIC 35u
+/* Display GPIO35 was independently bench-traced on production FW2 v07 and
+ * physically confirmed on FX0177 with WaveRider's three-pulse self-test.
+ * Older public material naming GPIO46 is incorrect for this board. */
+#define HAPTIC_GPIO35_VERIFIED 1u
 #define HAPTIC_PULSE_ON_US 150000u
 #define HAPTIC_PULSE_OFF_US 80000u
 #define HAPTIC_ALERT_COOLDOWN_US 30000000u
@@ -170,7 +173,7 @@ static uint64_t s_last_alert_us;
 static bool s_haptic_on;
 static uint8_t s_haptic_pulses_remaining;
 static uint64_t s_haptic_deadline_us;
-static const uint8_t s_haptic_probe_pins[] = {31u, 36u, 44u, 46u};
+static const uint8_t s_haptic_probe_pins[] = {31u, 35u, 36u, 44u, 46u};
 static uint8_t s_haptic_probe_index;
 static uint8_t s_haptic_probe_phase;
 static uint64_t s_haptic_probe_deadline_us;
@@ -1101,7 +1104,7 @@ static void clear_message_history(void) {
 }
 
 static void haptic_set(bool on) {
-#if HAPTIC_GPIO46_SOURCE_VERIFIED
+#if HAPTIC_GPIO35_VERIFIED
     s_haptic_on = on;
     gpio_put(PIN_HAPTIC, on ? 1u : 0u);
     busy_wait_us_32(5u);
@@ -1116,24 +1119,23 @@ static void haptic_set(bool on) {
 }
 
 static void haptic_start_three_pulses(void) {
-#if HAPTIC_GPIO46_SOURCE_VERIFIED
+#if HAPTIC_GPIO35_VERIFIED
     s_haptic_pulses_remaining = 3u;
     haptic_set(true);
     s_haptic_deadline_us = time_us_64() + HAPTIC_PULSE_ON_US;
 #else
     s_haptic_pulses_remaining = 0u;
     haptic_set(false);
-    DIAG("waverider: haptic unavailable; GPIO46 path is not verified\n");
+    DIAG("waverider: haptic unavailable; GPIO35 field path is disabled\n");
 #endif
 }
 
-static void haptic_test_meshtastic_exact(void) {
-#if HAPTIC_GPIO46_SOURCE_VERIFIED
-    /* Preserve Meshtastic's physically verified three 150 ms pulses and
-     * 80 ms gaps, but schedule them through WaveRider's nonblocking state
-     * machine. The former sleep loop stopped servicing OneWili for 690 ms;
-     * on the narrow v07 route that can discard live SDR/command traffic. */
-    DIAG("waverider: nonblocking Meshtastic haptic TEST begin\n");
+static void haptic_test_three_pulses(void) {
+#if HAPTIC_GPIO35_VERIFIED
+    /* Use three 150 ms pulses and 80 ms gaps, scheduled through WaveRider's
+     * nonblocking state machine. The former sleep loop stopped servicing
+     * OneWili for 690 ms and could discard live SDR/command traffic. */
+    DIAG("waverider: nonblocking GPIO35 haptic TEST begin\n");
     haptic_start_three_pulses();
 #endif
 }
@@ -1259,7 +1261,7 @@ static void draw_haptic_probe(void) {
 }
 
 static void pocket_alert_sample(uint64_t now) {
-#if !HAPTIC_GPIO46_SOURCE_VERIFIED
+#if !HAPTIC_GPIO35_VERIFIED
     (void)now;
     s_alert_enabled = false;
     s_alert_armed = true;
@@ -1297,7 +1299,7 @@ static void draw_pocket_alert_dynamic(void) {
     fb_fill_rect(36, 94, 408, 150, COL_PANEL);
 
     snprintf(line, sizeof line, "ALERT       %s",
-             HAPTIC_GPIO46_SOURCE_VERIFIED
+             HAPTIC_GPIO35_VERIFIED
                  ? (s_alert_enabled ? "ENABLED" : "DISABLED")
                  : "UNAVAILABLE");
     fb_draw_text(42, 101, 2,
@@ -1309,12 +1311,12 @@ static void draw_pocket_alert_dynamic(void) {
     snprintf(line, sizeof line, "CURRENT     %s dBFS", value);
     fb_draw_text(42, 163, 2, COL_TEXT, COL_PANEL, line);
 
-    const char *state = "GPIO46 ACTIVE-HIGH / 12mA";
+    const char *state = "GPIO35 VERIFIED / 12mA";
     uint16_t state_color = COL_YELLOW;
-    if (!HAPTIC_GPIO46_SOURCE_VERIFIED) {
+    if (!HAPTIC_GPIO35_VERIFIED) {
         state = "DRIVER DISABLED";
     } else if (s_haptic_pulses_remaining > 0u) {
-        state = s_haptic_on ? "TEST: GPIO46 OUTPUT HIGH" : "TEST: PULSE GAP";
+        state = s_haptic_on ? "TEST: GPIO35 OUTPUT HIGH" : "TEST: PULSE GAP";
         state_color = COL_YELLOW;
     } else if (s_alert_enabled) {
         state = s_alert_armed ? "ARMED" : "WAITING FOR SIGNAL TO FALL";
@@ -1326,7 +1328,7 @@ static void draw_pocket_alert_dynamic(void) {
     if (s_last_alert_us != 0u && now - s_last_alert_us < HAPTIC_ALERT_COOLDOWN_US)
         cooldown = (uint32_t)((HAPTIC_ALERT_COOLDOWN_US -
                               (now - s_last_alert_us) + 999999u) / 1000000u);
-    if (HAPTIC_GPIO46_SOURCE_VERIFIED)
+    if (HAPTIC_GPIO35_VERIFIED)
         snprintf(line, sizeof line,
                  "3 X 150 MS   30 SEC COOLDOWN   READY %lu SEC",
                  (unsigned long)cooldown);
@@ -1345,17 +1347,17 @@ static void draw_pocket_alert(void) {
     fb_draw_text(42, 66, 2, COL_TEXT, COL_PANEL, "HAPTIC SIGNAL DETECTOR");
     draw_pocket_alert_dynamic();
     draw_button(0, "BACK", COL_TEXT);
-    draw_button(1, HAPTIC_GPIO46_SOURCE_VERIFIED
+    draw_button(1, HAPTIC_GPIO35_VERIFIED
                        ? (s_alert_enabled ? "DISABLE" : "ENABLE")
                        : "UNAVAILABLE", COL_YELLOW);
     draw_button(2, "-1 dB", COL_GREEN);
     draw_button(3, "+1 dB", COL_BLUE);
-    draw_button(4, HAPTIC_GPIO46_SOURCE_VERIFIED ? "TEST" : "INFO", COL_RED);
+    draw_button(4, HAPTIC_GPIO35_VERIFIED ? "TEST" : "INFO", COL_RED);
     s_fb_dirty = true;
 }
 
 static void set_alert_enabled(bool enabled) {
-#if !HAPTIC_GPIO46_SOURCE_VERIFIED
+#if !HAPTIC_GPIO35_VERIFIED
     (void)enabled;
     s_alert_enabled = false;
     s_alert_armed = true;
@@ -1939,8 +1941,8 @@ static void handle_buttons(void) {
                 adjust_alert_threshold(1);
                 break;
             case UARTKBD_BTN_RED:
-                if (HAPTIC_GPIO46_SOURCE_VERIFIED) {
-                    haptic_test_meshtastic_exact();
+                if (HAPTIC_GPIO35_VERIFIED) {
+                    haptic_test_three_pulses();
                     draw_pocket_alert_dynamic();
                 } else {
                     s_ui_mode = UI_HAPTIC_PROBE;
@@ -2327,8 +2329,8 @@ static void handle_touch(void) {
                 else if (button == 2) adjust_alert_threshold(-1);
                 else if (button == 3) adjust_alert_threshold(1);
                 else if (button == 4) {
-                    if (HAPTIC_GPIO46_SOURCE_VERIFIED) {
-                        haptic_test_meshtastic_exact();
+                    if (HAPTIC_GPIO35_VERIFIED) {
+                        haptic_test_three_pulses();
                         draw_pocket_alert_dynamic();
                     } else {
                         s_ui_mode = UI_HAPTIC_PROBE;
@@ -2588,10 +2590,10 @@ int main(void) {
     st7796_init();
     ft6336_init();
     agentio_init();
-#if HAPTIC_GPIO46_SOURCE_VERIFIED
+#if HAPTIC_GPIO35_VERIFIED
     gpio_init(PIN_HAPTIC);
-    /* Match the haptic initialization shipped by the FreeWili Meshtastic
-     * port: GPIO46, active high, direct SIO output at 12 mA. */
+    /* Physically verified FW2 v07 motor path: Display GPIO35, active high,
+     * direct SIO output at a bounded 12 mA drive. */
     gpio_set_dir(PIN_HAPTIC, GPIO_OUT);
     gpio_set_drive_strength(PIN_HAPTIC, GPIO_DRIVE_STRENGTH_12MA);
     gpio_put(PIN_HAPTIC, 0u);
