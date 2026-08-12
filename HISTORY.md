@@ -61,13 +61,15 @@ checks, and release tags.
 
 ### Haptic investigation
 
-- Implemented a threshold/cooldown/re-arm design, but no physical vibration was
-  observed.
+- Implemented a threshold/cooldown/re-arm design. The initial public GPIO46
+  assignment produced no physical vibration.
 - Verified every requested GPIO46 transition at the RP2350 pad.
 - Ran a user-observed input-only weak-pull scan of GPIO31, GPIO36, GPIO44, and
   GPIO46; every candidate produced no response and was immediately restored.
-- Disabled unverified haptic output in public builds pending an authoritative
-  motor-control specification or confirmation that a motor is populated.
+- An independent production FW2 v07 bench trace later identified Display
+  GPIO35. WaveRider changed only the motor pin and physically produced all three
+  manual-Test pulses on FX0177 on 2026-08-11. GPIO35 is now the verified route;
+  RF threshold/cooldown/re-arm validation remains open.
 
 ### Initial public import
 

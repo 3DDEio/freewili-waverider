@@ -154,11 +154,11 @@ def test_native_pocket_alert_is_nonblocking_battery_conscious_and_user_configura
     source = SOURCE.read_text()
     cmake = (SOURCE.parent / "CMakeLists.txt").read_text()
 
-    assert "#define PIN_HAPTIC 46u" in source
-    assert "#define HAPTIC_GPIO46_SOURCE_VERIFIED 1u" in source
+    assert "#define PIN_HAPTIC 35u" in source
+    assert "#define HAPTIC_GPIO35_VERIFIED 1u" in source
     assert "#define HAPTIC_PULSE_ON_US 150000u" in source
     assert "#define HAPTIC_PULSE_OFF_US 80000u" in source
-    assert "#if HAPTIC_GPIO46_SOURCE_VERIFIED" in source
+    assert "#if HAPTIC_GPIO35_VERIFIED" in source
     assert "gpio_set_dir(PIN_HAPTIC, GPIO_OUT)" in source
     assert "gpio_set_drive_strength(PIN_HAPTIC, GPIO_DRIVE_STRENGTH_12MA)" in source
     assert "gpio_get_out_level(PIN_HAPTIC)" in source
@@ -171,21 +171,21 @@ def test_native_pocket_alert_is_nonblocking_battery_conscious_and_user_configura
     assert "haptic_start_three_pulses" in source
     assert "s_haptic_pulses_remaining = 3u" in source
     assert "sleep_ms(HAPTIC" not in source
-    assert "static void haptic_test_meshtastic_exact(void)" in source
-    haptic_test = source[source.index("static void haptic_test_meshtastic_exact(void)") :]
+    assert "static void haptic_test_three_pulses(void)" in source
+    haptic_test = source[source.index("static void haptic_test_three_pulses(void)") :]
     haptic_test = haptic_test[: haptic_test.index("static void haptic_task")]
-    assert '"waverider: nonblocking Meshtastic haptic TEST begin\\n"' in haptic_test
+    assert '"waverider: nonblocking GPIO35 haptic TEST begin\\n"' in haptic_test
     assert "haptic_start_three_pulses();" in haptic_test
     assert "sleep_ms(" not in haptic_test
-    assert source.count("haptic_test_meshtastic_exact();") == 2
+    assert source.count("haptic_test_three_pulses();") == 2
     assert "UI_POCKET_ALERT" in source
     assert '"POCKET ALERT"' in source
     assert '"3 X 150 MS   30 SEC COOLDOWN' in source
     assert '"ENABLE"' in source
     assert '"DISABLE"' in source
     assert '"TEST"' in source
-    assert '"TEST: GPIO46 OUTPUT HIGH"' in source
-    assert '"GPIO46 ACTIVE-HIGH / 12mA"' in source
+    assert '"TEST: GPIO35 OUTPUT HIGH"' in source
+    assert '"GPIO35 VERIFIED / 12mA"' in source
     assert '"VISUAL RSSI / WATERFALL / LEDS ARE ACTIVE"' in source
     assert "UARTKBD_BTN_PAGE" in source
     assert "send_command(14" in source
@@ -243,7 +243,7 @@ def test_pocket_alert_live_updates_do_not_clear_or_rebuild_the_full_screen():
 def test_haptic_pin_probe_is_explicit_input_only_and_restores_each_candidate():
     source = SOURCE.read_text()
 
-    assert "static const uint8_t s_haptic_probe_pins[] = {31u, 36u, 44u, 46u}" in source
+    assert "static const uint8_t s_haptic_probe_pins[] = {31u, 35u, 36u, 44u, 46u}" in source
     assert "#define HAPTIC_PROBE_TOUCH_US 350000u" in source
     assert "gpio_set_dir(pin, GPIO_IN);" in source
     assert "gpio_pull_up(pin);" in source

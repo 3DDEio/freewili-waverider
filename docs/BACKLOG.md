@@ -295,26 +295,21 @@ Brand migration begins after the connected device demonstrates:
   enable/disable through Main and CM0, and confirmed root-owned JSON returned
   to disabled/-50 dBFS/30 seconds. The first physical Test produced no felt
   vibration and exposed a separate full-screen repaint flash. The deployed
-  diagnostic build stopped full-page redraws during SDR samples, lengthened
-  Test pulses, normalized inherited GPIO overrides, and verified GPIO46's
-  output latch and settled pad both followed all six transitions. No vibration
-  was felt. Official public sources provide no driver beyond a secondary
-  GPIO46 inventory row marked `TODO`, and current logic-analyzer docs also use
-  GPIO46 as an analog input. The default build now leaves GPIO46 untouched and
-  reports haptics unavailable during normal operation. A user-approved,
-  input-only diagnostic can apply 350 ms weak pull-up/down touches to the four
-  remaining non-live candidates (GPIO31/36/44/46), restoring each pin before
-  advancing. Physical results on FX0177: GPIO31 produced no response on two
-  passes; GPIO36, GPIO44, and GPIO46 produced no response on one pass each.
-  The complete weak-pull candidate scan was therefore negative. The installed
-  Doom and Meshtastic apps were subsequently copied read-only and inventoried.
-  Meshtastic embeds `github.com/Ytuf/firmware`; its public `freewili-port`
-  branch maps HAP_MOTOR to Display GPIO46, drives it active-high at 12 mA, and
-  runs three 150 ms pulses with 80 ms gaps. Doom independently contains a
-  dedicated PWM haptic driver. WaveRider now matches the Meshtastic GPIO and
-  timing; checksums and source boundaries are in `docs/HAPTIC_EVIDENCE.md`.
-  **Remaining validation:** physically confirm manual Test, threshold crossing,
-  30-second cooldown, 3 dB re-arm, and persistence on the connected board.
+  diagnostic build stopped full-page redraws during SDR samples and verified
+  that GPIO46's output latch and settled pad followed all six transitions, but
+  no vibration was felt. A user-approved input-only diagnostic also found no
+  response on GPIO31/36/44/46. Current logic-analyzer material assigns Main
+  GPIO46 as an analog input, contradicting the older haptic claim. The installed
+  Doom and Meshtastic apps were copied read-only and inventoried; their evidence
+  and checksums remain in `docs/HAPTIC_EVIDENCE.md`.
+
+  On 2026-08-11 an independent production FW2 v07 bench trace identified the
+  vibration motor on **Display GPIO35**. A bounded WaveRider field build changed
+  only the motor pin, retained the 12 mA drive and three 150 ms / 80 ms pulse
+  envelope, and was installed on FX0177. The user physically confirmed all
+  three manual-Test pulses. WaveRider now uses the verified GPIO35 route.
+  **Remaining validation:** confirm an RF threshold crossing, 30-second
+  cooldown, 3 dB re-arm, persistence, and any additional board revisions.
 
 - [ ] Complete the seven-visible-LED field feedback pass. The native Display
   app now drives only indices 0..6: all red at launch, all yellow while Linux or

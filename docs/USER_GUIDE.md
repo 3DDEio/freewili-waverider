@@ -143,8 +143,9 @@ remain an unshown candidate; this is intentional to avoid false callsigns.
 When enabled, WaveRider alerts once when RSSI crosses upward through the chosen
 threshold. It will not alert again until RSSI falls at least 3 dB below the
 threshold, crosses upward again, and the 30-second cooldown has expired. The
-driver matches FreeWili's shipped Meshtastic GPIO46 implementation, but users
-should confirm the manual Test on their own board revision before relying on it.
+driver uses the physically verified production FW2 v07 Display GPIO35 route.
+Users should still confirm the manual Test on their own board revision before
+relying on it.
 
 ## Receiver status and Refresh
 
