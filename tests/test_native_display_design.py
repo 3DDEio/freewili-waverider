@@ -192,6 +192,36 @@ def test_native_pocket_alert_is_nonblocking_battery_conscious_and_user_configura
     assert "send_command(15" in source
 
 
+def test_page_key_opens_expandable_settings_hub_with_three_runtime_sections():
+    source = SOURCE.read_text()
+
+    assert "UI_SETTINGS" in source
+    assert "UI_CW_DECODER" in source
+    assert '"SETTINGS"' in source
+    assert '"AUDIO MONITOR"' in source
+    assert '"POCKET ALERT"' in source
+    assert '"CW DECODER"' in source
+    assert '"UP/DOWN SELECT   CHECK OPEN   PAGE BACK"' in source
+    page_handler = source[source.index("case UARTKBD_BTN_PAGE:") :]
+    assert "s_ui_mode = UI_SETTINGS;" in page_handler
+    assert "draw_settings();" in page_handler
+    assert "open_selected_setting" in source
+    assert "move_settings_cursor" in source
+
+
+def test_settings_are_honest_about_audio_and_cw_toggle_is_persistent():
+    source = SOURCE.read_text()
+
+    assert '"MONITOR     UNAVAILABLE"' in source
+    assert '"VOLUME      --"' in source
+    assert '"SAFE SPEAKER/HEADPHONE PCM TRANSPORT"' in source
+    assert '"IS REQUIRED BEFORE CONTROLS UNLOCK."' in source
+    assert "static bool s_cw_enabled = true;" in source
+    assert "static void set_cw_enabled(bool enabled)" in source
+    assert "send_command(0u, enabled ? 3u : 2u);" in source
+    assert '"EXISTING VERIFIED HISTORY IS RETAINED."' in source
+
+
 def test_native_morse_message_overlay_uses_bounded_sideband_and_keeps_plot_live():
     source = SOURCE.read_text()
 

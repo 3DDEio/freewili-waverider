@@ -129,6 +129,7 @@ class RtlIqStream:
         self.rows: queue.Queue[SpectrumRow | Exception] = queue.Queue(maxsize=2)
         self.messages: queue.Queue[DecodedMessage] = queue.Queue(maxsize=4)
         self.morse_decoder = NfmMorseDecoder()
+        self.cw_enabled = True
         self.reader: threading.Thread | None = None
         self.device = ctypes.c_void_p()
         self.stop_event = threading.Event()
@@ -239,13 +240,14 @@ class RtlIqStream:
                         self.entry.span_hz,
                     )
                 )
-                for message in self.morse_decoder.feed_iq(
-                    payload,
-                    self.sample_rate_hz,
-                    self.tuner_center_hz,
-                    self.entry.frequency_hz,
-                ):
-                    self._publish_message(message)
+                if self.cw_enabled:
+                    for message in self.morse_decoder.feed_iq(
+                        payload,
+                        self.sample_rate_hz,
+                        self.tuner_center_hz,
+                        self.entry.frequency_hz,
+                    ):
+                        self._publish_message(message)
                 remaining = TARGET_PERIOD_SECONDS - (time.monotonic() - started)
                 if remaining > 0:
                     self.stop_event.wait(remaining)
@@ -264,3 +266,12 @@ class RtlIqStream:
 
     def close(self) -> None:
         self.stop()
+
+    def set_cw_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self.cw_enabled:
+            return
+        self.cw_enabled = enabled
+        self.morse_decoder.reset()
+        while not self.messages.empty():
+            self.messages.get_nowait()

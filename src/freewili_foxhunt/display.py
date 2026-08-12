@@ -101,6 +101,10 @@ class NullDisplay:
         del enabled, threshold_dbfs
         return
 
+    def set_cw_decoder(self, enabled: bool) -> None:
+        del enabled
+        return
+
     def close(self) -> None:
         return
 
@@ -733,6 +737,11 @@ class OneWiliDisplay:
         # haptic motor is wired to its RP2350 GPIO, not the CM0 Linux host.
         del enabled, threshold_dbfs
 
+    def set_cw_decoder(self, enabled: bool) -> None:
+        # The native settings page owns this control. Stock dynamic panels do
+        # not expose the Page-key navigation required to reach it.
+        del enabled
+
     def close(self) -> None:
         if self.device is not None:
             try:
@@ -804,6 +813,7 @@ class NativeSignalDisplay:
         self._library_notice = 0
         self._alert_enabled = False
         self._alert_threshold_dbfs = -50
+        self._cw_enabled = True
         self._message_frames: deque[tuple[int, int, tuple[int, int, int]]] = deque()
 
     def _call(self, command: str, *, required: bool = True) -> Any | None:
@@ -910,6 +920,7 @@ class NativeSignalDisplay:
             len(entries)
             | (int(self._alert_enabled) << 8)
             | (threshold_offset << 9)
+            | (int(self._cw_enabled) << 16)
         )
         values: list[tuple[str, float | int]] = [
             ("wr_state", 1),
@@ -936,6 +947,9 @@ class NativeSignalDisplay:
             raise ValueError("pocket-alert threshold must be between -70 and -10 dBFS")
         self._alert_enabled = bool(enabled)
         self._alert_threshold_dbfs = int(threshold_dbfs)
+
+    def set_cw_decoder(self, enabled: bool) -> None:
+        self._cw_enabled = bool(enabled)
 
     def build_library(
         self,
@@ -1134,6 +1148,8 @@ class NativeSignalDisplay:
         self._set_many([("wr_ack", sequence)])
         if opcode == 0 and argument == 1:
             return "messages_clear"
+        if opcode == 0 and argument in (2, 3):
+            return f"decoder_enabled:{1 if argument == 3 else 0}"
         if opcode == 6:
             return f"select:{argument}"
         if opcode == 1:

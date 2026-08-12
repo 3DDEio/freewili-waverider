@@ -95,6 +95,65 @@ class PocketAlertStore:
 
 
 @dataclass(slots=True)
+class DecoderSettings:
+    """Persistent opt-in controls for decoded-data processing."""
+
+    cw_enabled: bool = True
+
+    def to_dict(self) -> dict[str, bool | int]:
+        return {
+            "schema_version": 1,
+            "cw_enabled": self.cw_enabled,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "DecoderSettings":
+        if int(payload.get("schema_version", 1)) != 1:
+            raise ValueError("unsupported decoder-settings schema")
+        return cls(cw_enabled=bool(payload.get("cw_enabled", True)))
+
+
+class DecoderSettingsStore:
+    """Atomic persistence for the CW decoder toggle."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+
+    def save(self, settings: DecoderSettings) -> Path:
+        payload = json.dumps(settings.to_dict(), indent=2, sort_keys=True) + "\n"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", suffix=".tmp", dir=self.path.parent
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, self.path)
+            directory_fd = os.open(self.path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            if os.path.exists(temporary_name):
+                os.unlink(temporary_name)
+        return self.path
+
+    def load(self) -> DecoderSettings:
+        with self.path.open("r", encoding="utf-8") as handle:
+            return DecoderSettings.from_dict(json.load(handle))
+
+    def load_or_default(self) -> DecoderSettings:
+        if self.path.exists():
+            return self.load()
+        settings = DecoderSettings()
+        self.save(settings)
+        return settings
+
+
+@dataclass(slots=True)
 class MessageRecord:
     """One durable CW message observation, coalesced across beacon repeats."""
 

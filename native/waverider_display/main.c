@@ -133,7 +133,9 @@ typedef enum {
     UI_LISTS_LOADING,
     UI_LISTS,
     UI_DELETE_CONFIRM,
+    UI_SETTINGS,
     UI_AUDIO,
+    UI_CW_DECODER,
     UI_MESSAGE_FREQUENCIES,
     UI_MESSAGES,
     UI_MESSAGE_CLEAR_CONFIRM,
@@ -168,6 +170,8 @@ static bool s_main_reset_attempted;
 static bool s_startup_refresh_attempted;
 static bool s_alert_enabled;
 static int32_t s_alert_threshold_tenths = -500;
+static bool s_cw_enabled = true;
+static uint8_t s_settings_cursor;
 static bool s_alert_armed = true;
 static uint64_t s_last_alert_us;
 static bool s_haptic_on;
@@ -202,6 +206,9 @@ static void restore_screen(void);
 static void send_command(uint8_t opcode, uint8_t argument);
 static void enter_live_view(bool clear_plot);
 static void draw_library(void);
+static void draw_settings(void);
+static void draw_audio_page(void);
+static void draw_cw_decoder(void);
 static void draw_pocket_alert(void);
 static void draw_pocket_alert_dynamic(void);
 static void draw_haptic_probe(void);
@@ -479,7 +486,7 @@ static void draw_static(void) {
     fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
     fb_draw_text(376, 5, 2, COL_GREEN, COL_BG, "SDR LIVE");
     fb_draw_text(8, 272, 1, COL_DIM, COL_PANEL,
-                 "CHECK=TUNE  PAGE=POCKET ALERT");
+                 "CHECK=TUNE  PAGE=SETTINGS");
     draw_rssi_scale();
     fb_draw_text(SCALE_X, 248, 1, COL_DIM, COL_BG,
                  "-70          -50          -30          -10");
@@ -883,17 +890,115 @@ static void draw_audio_page(void) {
     fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
     fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
     fb_draw_text(396, 5, 2, COL_YELLOW, COL_BG, "AUDIO");
-    fb_fill_rect(24, 54, 432, 196, COL_PANEL);
-    fb_draw_text(62, 78, 2, COL_YELLOW, COL_PANEL, "AUDIO IS NOT AVAILABLE YET");
-    fb_draw_text(62, 118, 1, COL_TEXT, COL_PANEL,
+    fb_fill_rect(20, 48, 440, 208, COL_PANEL);
+    fb_draw_text(42, 66, 2, COL_TEXT, COL_PANEL, "LIVE AUDIO MONITOR");
+    fb_draw_text(42, 104, 2, COL_YELLOW, COL_PANEL,
+                 "MONITOR     UNAVAILABLE");
+    fb_draw_text(42, 135, 2, COL_DIM, COL_PANEL,
+                 "VOLUME      --");
+    fb_draw_text(42, 174, 1, COL_TEXT, COL_PANEL,
                  "THE SDR RECEIVER REMAINS MUTED.");
-    fb_draw_text(62, 142, 1, COL_DIM, COL_PANEL,
-                 "A BOUNDED PCM BRIDGE IS REQUIRED BEFORE");
-    fb_draw_text(62, 158, 1, COL_DIM, COL_PANEL,
-                 "SPEAKER OR HEADPHONE OUTPUT CAN BE SAFE.");
-    fb_draw_text(62, 202, 1, COL_BLUE, COL_PANEL,
-                 "CHECK, RED, OR CANCEL = BACK");
+    fb_draw_text(42, 194, 1, COL_DIM, COL_PANEL,
+                 "SAFE SPEAKER/HEADPHONE PCM TRANSPORT");
+    fb_draw_text(42, 210, 1, COL_DIM, COL_PANEL,
+                 "IS REQUIRED BEFORE CONTROLS UNLOCK.");
+    fb_draw_text(42, 232, 1, COL_BLUE, COL_PANEL,
+                 "WATERFALL AND CW DECODING STAY LIVE");
     draw_button(0, "BACK", COL_TEXT);
+    draw_button(1, "OFF", COL_DIM);
+    draw_button(2, "VOL-", COL_DIM);
+    draw_button(3, "VOL+", COL_DIM);
+    draw_button(4, "LOCKED", COL_YELLOW);
+    s_fb_dirty = true;
+}
+
+static void draw_setting_row(int row, const char *title, const char *detail,
+                             uint16_t accent) {
+    int y = 50 + row * 70;
+    uint16_t background = row == (int)s_settings_cursor ? COL_SELECT : COL_PANEL;
+    fb_fill_rect(24, y, 432, 58, background);
+    fb_fill_rect(24, y, 4, 58, accent);
+    fb_draw_text(42, y + 8, 2, COL_TEXT, background, title);
+    fb_draw_text(42, y + 34, 1, accent, background, detail);
+    if (row == (int)s_settings_cursor)
+        fb_draw_text(430, y + 20, 2, COL_WHITE, background, ">");
+}
+
+static void draw_settings(void) {
+    char detail[48];
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+    fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
+    fb_draw_text(350, 5, 2, COL_GREEN, COL_BG, "SETTINGS");
+    draw_setting_row(0, "AUDIO MONITOR",
+                     "LOCKED - PCM BRIDGE REQUIRED", COL_YELLOW);
+    snprintf(detail, sizeof detail, "%s  THRESHOLD %ld dBFS",
+             s_alert_enabled ? "ON " : "OFF",
+             (long)(s_alert_threshold_tenths / 10));
+    draw_setting_row(1, "POCKET ALERT", detail,
+                     s_alert_enabled ? COL_GREEN : COL_DIM);
+    snprintf(detail, sizeof detail, "%s  AUTO TONE 450-1150 HZ",
+             s_cw_enabled ? "ON " : "OFF");
+    draw_setting_row(2, "CW DECODER", detail,
+                     s_cw_enabled ? COL_BLUE : COL_DIM);
+    fb_draw_text(24, 266, 1, COL_DIM, COL_BG,
+                 "UP/DOWN SELECT   CHECK OPEN   PAGE BACK");
+    draw_button(0, "BACK", COL_TEXT);
+    draw_button(1, "PREV", COL_YELLOW);
+    draw_button(2, "OPEN", COL_GREEN);
+    draw_button(3, "NEXT", COL_BLUE);
+    draw_button(4, "LIVE", COL_RED);
+    s_fb_dirty = true;
+}
+
+static void open_selected_setting(void) {
+    if (s_settings_cursor == 0u) {
+        s_ui_mode = UI_AUDIO;
+        draw_audio_page();
+    } else if (s_settings_cursor == 1u) {
+        s_ui_mode = UI_POCKET_ALERT;
+        draw_pocket_alert();
+    } else {
+        s_ui_mode = UI_CW_DECODER;
+        draw_cw_decoder();
+    }
+}
+
+static void move_settings_cursor(int delta) {
+    s_settings_cursor = (uint8_t)((s_settings_cursor + 3 + delta) % 3);
+    draw_settings();
+}
+
+static void set_cw_enabled(bool enabled) {
+    s_cw_enabled = enabled;
+    /* Opcode zero carries infrequent global actions. Argument one already
+     * clears message history; two/three persist decoder off/on on CM0. */
+    send_command(0u, enabled ? 3u : 2u);
+    draw_cw_decoder();
+}
+
+static void draw_cw_decoder(void) {
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+    fb_draw_text(8, 2, 3, COL_TEXT, COL_BG, "WaveRider");
+    fb_draw_text(330, 5, 2, COL_BLUE, COL_BG, "CW DECODER");
+    fb_fill_rect(20, 48, 440, 208, COL_PANEL);
+    fb_draw_text(42, 66, 2, COL_TEXT, COL_PANEL,
+                 "MORSE MESSAGE DETECTION");
+    fb_draw_text(42, 106, 2,
+                 s_cw_enabled ? COL_GREEN : COL_DIM, COL_PANEL,
+                 s_cw_enabled ? "DECODER     ENABLED" : "DECODER     DISABLED");
+    fb_draw_text(42, 141, 1, COL_TEXT, COL_PANEL,
+                 "NFM TONE    AUTO 450-1150 HZ");
+    fb_draw_text(42, 166, 1, COL_DIM, COL_PANEL,
+                 "DISABLING STOPS NEW MESSAGE PROCESSING.");
+    fb_draw_text(42, 184, 1, COL_DIM, COL_PANEL,
+                 "EXISTING VERIFIED HISTORY IS RETAINED.");
+    fb_draw_text(42, 220, 1, COL_BLUE, COL_PANEL,
+                 "CHECK OR TOGGLE CHANGES THIS SETTING");
+    draw_button(0, "BACK", COL_TEXT);
+    draw_button(1, s_cw_enabled ? "DISABLE" : "ENABLE", COL_YELLOW);
+    draw_button(2, "TOGGLE", COL_GREEN);
+    draw_button(3, "", COL_BLUE);
+    draw_button(4, "LIVE", COL_RED);
     s_fb_dirty = true;
 }
 
@@ -1600,7 +1705,8 @@ static void update_leds(void) {
     }
     if (s_ui_mode == UI_LISTS_LOADING || s_ui_mode == UI_LISTS ||
         s_ui_mode == UI_DELETE_CONFIRM || s_ui_mode == UI_ADD_FREQUENCY ||
-        s_ui_mode == UI_AUDIO) {
+        s_ui_mode == UI_SETTINGS || s_ui_mode == UI_AUDIO ||
+        s_ui_mode == UI_CW_DECODER) {
         for (int i = 0; i < 7; i++)
             ws2812_set_pixel((uint)i, (rgb_t){.r = 0, .g = 70, .b = 110});
         ws2812_show();
@@ -1736,6 +1842,7 @@ static void poll_list(void) {
         !signal_get_u32("wr_sel", &selected)) return;
     if (state == 1u) {
         s_alert_enabled = ((count >> 8u) & 1u) != 0u;
+        s_cw_enabled = ((count >> 16u) & 1u) != 0u;
         int32_t threshold_dbfs = (int32_t)((count >> 9u) & 0x7Fu) - 90;
         if (threshold_dbfs >= -70 && threshold_dbfs <= -10)
             s_alert_threshold_tenths = threshold_dbfs * 10;
@@ -1780,6 +1887,12 @@ static void poll_list(void) {
         if (s_ui_mode == UI_LISTS || s_ui_mode == UI_LISTS_LOADING ||
             s_ui_mode == UI_DELETE_CONFIRM)
             enter_live_view(false);
+        else if (s_ui_mode == UI_SETTINGS)
+            draw_settings();
+        else if (s_ui_mode == UI_AUDIO)
+            draw_audio_page();
+        else if (s_ui_mode == UI_CW_DECODER)
+            draw_cw_decoder();
         else if (s_ui_mode == UI_POCKET_ALERT)
             draw_pocket_alert();
         else
@@ -1793,8 +1906,7 @@ static void poll_frame(void) {
      * UI to Live. This also avoids adding a mailbox read to every 50 ms frame
      * poll and preserves the proven waterfall cadence. */
     if (s_ui_mode == UI_LISTS_LOADING || s_ui_mode == UI_LISTS ||
-        s_ui_mode == UI_DELETE_CONFIRM || s_ui_mode == UI_ADD_FREQUENCY ||
-        s_ui_mode == UI_AUDIO)
+        s_ui_mode == UI_DELETE_CONFIRM || s_ui_mode == UI_ADD_FREQUENCY)
         return;
     uint32_t sequence;
     if (!signal_get_u32("wr_seq", &sequence) || sequence == s_row_seq) return;
@@ -1895,6 +2007,34 @@ static void handle_buttons(void) {
         DIAG("waverider: button id=%u pressed=%u\n",
              (unsigned)event.btn, event.pressed ? 1u : 0u);
         if (!event.pressed) continue;
+        if (s_ui_mode == UI_SETTINGS) {
+            switch (event.btn) {
+            case UARTKBD_BTN_NAV_LEFT:
+            case UARTKBD_BTN_NAV_UP:
+            case UARTKBD_BTN_YELLOW:
+                move_settings_cursor(-1);
+                break;
+            case UARTKBD_BTN_NAV_RIGHT:
+            case UARTKBD_BTN_NAV_DOWN:
+            case UARTKBD_BTN_BLUE:
+                move_settings_cursor(1);
+                break;
+            case UARTKBD_BTN_NAV_CENTER:
+            case UARTKBD_BTN_OK:
+            case UARTKBD_BTN_GREEN:
+                open_selected_setting();
+                break;
+            case UARTKBD_BTN_GREY:
+            case UARTKBD_BTN_CANCEL:
+            case UARTKBD_BTN_PAGE:
+            case UARTKBD_BTN_RED:
+                enter_live_view(false);
+                break;
+            default:
+                break;
+            }
+            continue;
+        }
         if (s_ui_mode == UI_HAPTIC_PROBE) {
             switch (event.btn) {
             case UARTKBD_BTN_NAV_LEFT:
@@ -1952,7 +2092,8 @@ static void handle_buttons(void) {
             case UARTKBD_BTN_GREY:
             case UARTKBD_BTN_CANCEL:
             case UARTKBD_BTN_PAGE:
-                enter_live_view(false);
+                s_ui_mode = UI_SETTINGS;
+                draw_settings();
                 break;
             default:
                 break;
@@ -2101,12 +2242,32 @@ static void handle_buttons(void) {
             continue;
         }
         if (s_ui_mode == UI_AUDIO) {
-            if (event.btn == UARTKBD_BTN_NAV_CENTER ||
-                event.btn == UARTKBD_BTN_OK ||
-                event.btn == UARTKBD_BTN_RED ||
-                event.btn == UARTKBD_BTN_CANCEL ||
-                event.btn == UARTKBD_BTN_GREY)
+            if (event.btn == UARTKBD_BTN_RED)
                 enter_live_view(false);
+            else if (event.btn == UARTKBD_BTN_NAV_CENTER ||
+                     event.btn == UARTKBD_BTN_OK ||
+                     event.btn == UARTKBD_BTN_CANCEL ||
+                     event.btn == UARTKBD_BTN_GREY ||
+                     event.btn == UARTKBD_BTN_PAGE) {
+                s_ui_mode = UI_SETTINGS;
+                draw_settings();
+            }
+            continue;
+        }
+        if (s_ui_mode == UI_CW_DECODER) {
+            if (event.btn == UARTKBD_BTN_RED)
+                enter_live_view(false);
+            else if (event.btn == UARTKBD_BTN_YELLOW ||
+                     event.btn == UARTKBD_BTN_GREEN ||
+                     event.btn == UARTKBD_BTN_NAV_CENTER ||
+                     event.btn == UARTKBD_BTN_OK)
+                set_cw_enabled(!s_cw_enabled);
+            else if (event.btn == UARTKBD_BTN_CANCEL ||
+                     event.btn == UARTKBD_BTN_GREY ||
+                     event.btn == UARTKBD_BTN_PAGE) {
+                s_ui_mode = UI_SETTINGS;
+                draw_settings();
+            }
             continue;
         }
         if (s_ui_mode == UI_LISTS_LOADING) {
@@ -2201,8 +2362,8 @@ static void handle_buttons(void) {
         }
         switch (event.btn) {
         case UARTKBD_BTN_PAGE:
-            s_ui_mode = UI_POCKET_ALERT;
-            draw_pocket_alert();
+            s_ui_mode = UI_SETTINGS;
+            draw_settings();
             break;
         case UARTKBD_BTN_GREY:
             s_ui_mode = UI_LISTS_LOADING;
@@ -2313,6 +2474,20 @@ static void handle_touch(void) {
                 s_ui_mode = UI_LISTS;
                 draw_library();
             }
+        } else if (s_ui_mode == UI_SETTINGS) {
+            if (y >= 50u && y < 248u && x >= 24u && x < 456u) {
+                int row = (int)(y - 50u) / 70;
+                if (row >= 0 && row < 3) {
+                    s_settings_cursor = (uint8_t)row;
+                    draw_settings();
+                }
+            } else if (y >= 286u) {
+                int button = (int)(x / 96u);
+                if (button == 0 || button == 4) enter_live_view(false);
+                else if (button == 1) move_settings_cursor(-1);
+                else if (button == 2) open_selected_setting();
+                else if (button == 3) move_settings_cursor(1);
+            }
         } else if (s_ui_mode == UI_HAPTIC_PROBE) {
             if (y >= 286u) {
                 int button = (int)(x / 96u);
@@ -2324,7 +2499,10 @@ static void handle_touch(void) {
         } else if (s_ui_mode == UI_POCKET_ALERT) {
             if (y >= 286u) {
                 int button = (int)(x / 96u);
-                if (button == 0) enter_live_view(false);
+                if (button == 0) {
+                    s_ui_mode = UI_SETTINGS;
+                    draw_settings();
+                }
                 else if (button == 1) set_alert_enabled(!s_alert_enabled);
                 else if (button == 2) adjust_alert_threshold(-1);
                 else if (button == 3) adjust_alert_threshold(1);
@@ -2401,7 +2579,25 @@ static void handle_touch(void) {
                 }
             }
         } else if (s_ui_mode == UI_AUDIO) {
-            enter_live_view(false);
+            if (y >= 286u) {
+                int button = (int)(x / 96u);
+                if (button == 4) enter_live_view(false);
+                else {
+                    s_ui_mode = UI_SETTINGS;
+                    draw_settings();
+                }
+            }
+        } else if (s_ui_mode == UI_CW_DECODER) {
+            if (y >= 286u) {
+                int button = (int)(x / 96u);
+                if (button == 4) enter_live_view(false);
+                else if (button == 1 || button == 2)
+                    set_cw_enabled(!s_cw_enabled);
+                else {
+                    s_ui_mode = UI_SETTINGS;
+                    draw_settings();
+                }
+            }
         } else if (s_ui_mode == UI_LISTS_LOADING) {
             if (y >= 286u && x < 96u) {
                 draw_library_loading("RETURNING TO LIVE");
@@ -2444,8 +2640,8 @@ static void handle_touch(void) {
             }
         } else if (x >= SCALE_X && x < SCALE_X + SCALE_W + 72 &&
                    y >= 228u && y < 278u) {
-            s_ui_mode = UI_POCKET_ALERT;
-            draw_pocket_alert();
+            s_ui_mode = UI_SETTINGS;
+            draw_settings();
         } else if (x < 140u && y < 28u) {
             /* The title doubles as a harmless splash replay target for field
              * verification; launch still shows the same artwork exactly once. */

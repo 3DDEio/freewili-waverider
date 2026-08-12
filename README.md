@@ -83,6 +83,9 @@ and the [User guide](docs/USER_GUIDE.md) for normal operation.
   Its Display GPIO35 active-high, 12 mA driver and 150/80 ms timing are
   physically verified on production FW2 v07 unit FX0177. Other board revisions
   should run the manual Test before relying on Pocket Alert.
+- A Page-key **Settings** hub for Audio Monitor, Pocket Alert, and CW Decoder.
+  Pocket Alert and the persistent CW toggle are functional; Audio exposes its
+  future monitor/volume controls as locked until the safe PCM transport exists.
 - Plain-language startup, refresh, and receiver-fault status pages.
 - Live adaptive-pitch NFM Morse detection with an eight-second `MESSAGE DETECTED`
   overlay plus a frequency-grouped **MSGS** history. The CM0 stores 100
@@ -157,8 +160,8 @@ live, the installer restores maintenance mode and the serial console returns.
   status, and repaint the waterfall after a new row arrives.
 - D-pad Up/Down/Left/Right: browse and immediately tune list entries on the live
   screen. Check applies the highlighted entry.
-- Page (or a tap on the RSSI scale) — **Pocket Alert:** enable/disable the
-  threshold alert, adjust its dBFS threshold, and run a three-pulse manual Test.
+- Page (or a tap on the RSSI scale) — **Settings:** open Audio Monitor, Pocket
+  Alert, or CW Decoder. Up/Down selects; Check opens; Page returns.
 
 Pocket Alert is source-verified but still beta hardware functionality. Confirm
 the manual Test on your FreeWili revision before relying on eyes-free alerts.

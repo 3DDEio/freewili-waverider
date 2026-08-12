@@ -36,6 +36,8 @@ processor. The low-rate app-signal mailbox cannot carry 16 kHz PCM safely.
 
 **User impact:** WaveRider currently provides visual waterfall/RSSI hunting
 only. It does not play NFM beacon audio through the speaker or headphone jack.
+The Settings screen shows Audio Monitor and Volume as locked/unavailable so the
+planned control surface is discoverable without implying that sound is active.
 
 **Future direction:** Add a bounded high-rate PCM bridge with drop-oldest
 buffering, mute, volume, squelch, and Speaker/Headphones/Both routing. Audio
@@ -69,6 +71,10 @@ unmodulated carrier is rejected. Connected over-the-air decoding of the
 147.500 MHz KO6FQY beacon has produced partial over-the-air text, but the
 complete payload still needs repeatable clean recovery before this feature is
 considered field-proven.
+
+The decoder can be persistently disabled from Settings. Disabling it stops new
+Morse processing but deliberately retains existing verified and candidate
+history until the user confirms Clear in MSGS.
 
 ## RSSI is relative dBFS
 

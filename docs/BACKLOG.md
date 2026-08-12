@@ -283,6 +283,18 @@ Brand migration begins after the connected device demonstrates:
 
 ## Subsequent WaveRider features
 
+- [x] Replace the Page-key Pocket Alert shortcut with an expandable Settings
+  hub. The deployed UI now groups Audio Monitor, Pocket Alert, and CW Decoder;
+  Up/Down selects a row and Check opens it without stopping SDR acquisition.
+  Pocket Alert retains its persistent threshold/Test controls. CW processing
+  now has an atomic persistent enable switch that resets pending decoder state
+  without deleting message history. Audio shows the requested monitor and
+  volume touchpoints as locked/unavailable until its safe PCM transport is
+  implemented. Host persistence/transport/UI tests and the SRAM-only native
+  display build pass, and the matching CM0/native bundle is installed on the
+  connected device. Physical Page-key navigation and persistence QA remain
+  open.
+
 - [ ] Add opt-in Pocket Alert vibration for eyes-free hunting. The design uses
   three nonblocking 150 ms pulses separated by 80 ms gaps, a fixed 30-second
   cooldown, and a 3 dB fall-and-rise re-arm
@@ -327,8 +339,8 @@ Brand migration begins after the connected device demonstrates:
   proven in WiliBSP through the NAU88C10 codec at approximately 16 kHz, but the
   demodulator runs on CM0 Linux while the codec/DMA lives on the Display CPU.
   The current low-rate app-signal mailbox cannot carry PCM. Implement and prove
-  a dedicated bounded CM0-to-Display audio transport before exposing an Audio
-  menu. Audio must default muted, respect the 0.5 W speaker limit, use the BSP
+  a dedicated bounded CM0-to-Display audio transport before unlocking the Audio
+  settings. Audio must default muted, respect the 0.5 W speaker limit, use the BSP
   speaker safety cap and low-power mute state, and shed audio frames instead of
   slowing RSSI, waterfall, controls, or recovery.
 - [ ] Field-validate live Morse message detection. CM0 now removes the known
@@ -353,7 +365,14 @@ Brand migration begins after the connected device demonstrates:
   host suite covers grouped navigation plus cache/persistence clearing.
   Partial KO6FQY/domain text has now been observed over air; confirm repeatable
   recovery of `KO6FQY JOIN NORCALCYBER.IO! KO6FQY` at 147.500 MHz before
-  calling this field-proven.
+  calling this field-proven. A later live inspection found 21 hidden candidates
+  but zero verified messages and exposed the timing model at 205.9 ms (about
+  5.8 WPM): rejected noise was still retraining the persistent speed estimate.
+  The deployed correction bounds acquisition to 8--30 WPM and updates learned
+  timing only after a candidate passes every quality gate. The regression and
+  full 176-test suite pass; after service restart the connected decoder returned
+  to 92.3 ms / 13 WPM at exactly 147.500 MHz. Fresh over-air candidate and
+  consensus validation remains open.
 - Close-in attenuation/gain workflow for near-field hunting.
 - Calibrated color legend tied to the frozen relative dBFS waterfall scale.
 - Compass-assisted heading sweep and saved hunt observations.

@@ -7,6 +7,8 @@ from pathlib import Path
 from freewili_foxhunt.app import FoxhuntApp
 from freewili_foxhunt.models import FrequencyEntry, FrequencyList
 from freewili_foxhunt.store import (
+    DecoderSettings,
+    DecoderSettingsStore,
     FrequencyLibraryStore,
     ListStore,
     PocketAlertSettings,
@@ -24,6 +26,7 @@ class FakeDisplay:
         self.list_selection = None
         self.library = None
         self.alert = None
+        self.cw_enabled = None
 
     def build(self, *_args) -> None:
         self.built += 1
@@ -49,17 +52,24 @@ class FakeDisplay:
     def set_pocket_alert(self, enabled, threshold_dbfs) -> None:
         self.alert = (enabled, threshold_dbfs)
 
+    def set_cw_decoder(self, enabled) -> None:
+        self.cw_enabled = enabled
+
 
 class FakeSdr:
     def __init__(self) -> None:
         self.started = []
         self.stopped = 0
+        self.cw_enabled = None
 
     def start(self, entry) -> None:
         self.started.append(entry.frequency_hz)
 
     def stop(self) -> None:
         self.stopped += 1
+
+    def set_cw_enabled(self, enabled) -> None:
+        self.cw_enabled = enabled
 
 
 class AppEditorTests(unittest.TestCase):
@@ -82,6 +92,10 @@ class AppEditorTests(unittest.TestCase):
             ),
             alert_store=PocketAlertStore(Path(directory) / "pocket-alert.json"),
             alert_settings=PocketAlertSettings(),
+            decoder_store=DecoderSettingsStore(
+                Path(directory) / "decoder-settings.json"
+            ),
+            decoder_settings=DecoderSettings(),
         )
 
     def test_add_move_delete_and_save(self) -> None:
@@ -156,6 +170,27 @@ class AppEditorTests(unittest.TestCase):
             self.assertEqual(app.display.alert, (True, -47))
             self.assertEqual(len(app.sdr.started), starts)
             self.assertEqual(app.display.built, 0)
+
+    def test_cw_decoder_toggle_persists_without_retuning_or_erasing_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            app = self.make_app(directory)
+            starts = len(app.sdr.started)
+            app.last_morse_message = "KO6FQY"
+
+            app._handle_action("decoder_enabled:0")
+
+            settings = DecoderSettingsStore(
+                Path(directory) / "decoder-settings.json"
+            ).load()
+            self.assertFalse(settings.cw_enabled)
+            self.assertFalse(app.sdr.cw_enabled)
+            self.assertFalse(app.display.cw_enabled)
+            self.assertEqual(app.last_morse_message, "KO6FQY")
+            self.assertEqual(len(app.sdr.started), starts)
+
+            app._handle_action("decoder_enabled:1")
+            self.assertTrue(app.sdr.cw_enabled)
+            self.assertTrue(app.display.cw_enabled)
 
     def test_stop_and_start_buttons_control_capture(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
