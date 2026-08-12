@@ -212,6 +212,7 @@ muted after install and after any receiver fault.
 ## Persistent data
 
 - Application: `/opt/freewili-foxhunt`
+- Previous CM0 runtime: `/opt/freewili-foxhunt.previous`
 - Lists: `/var/lib/freewili-foxhunt/lists`
 - Saved-frequency library: `/var/lib/freewili-foxhunt/frequency-library.json`
 - Runtime status: `/run/freewili-foxhunt/status.json`
@@ -222,3 +223,5 @@ muted after install and after any receiver fault.
 `foxhuntctl maintenance --reboot` disables the service and restores the serial
 gadget lines. The first receiver boot rolls back automatically if its readiness
 check fails. Uninstall keeps user lists unless `--purge` is explicitly passed.
+The Linux uninstaller does not remove the independent Main-SD Apps-menu UF2;
+removing that file currently requires a supported Main-SD file operation.

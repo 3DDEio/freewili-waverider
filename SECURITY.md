@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-WaveRider is currently beta software. Security fixes target the latest tagged
-prerelease and the `main` branch.
+Security fixes target the latest supported `0.1.x` release and the `main`
+branch. Prereleases are supported only until the next prerelease or stable
+release of the same line.
 
 ## Reporting a vulnerability
 
@@ -29,5 +30,9 @@ coordinate a fix privately, and publish credit unless anonymity is requested.
 - The native installer must reject QSPI-targeted images and execute only from
   volatile SRAM/PSRAM.
 - Public releases must include checksums.
+- Release tags must match the project version and point to a commit already in
+  protected `main`; GitHub Actions dependencies are pinned to reviewed commits.
+- The serial installer transfers only an explicit CM0 runtime allowlist. It
+  must never package arbitrary untracked files from a maintainer checkout.
 - Secrets, device credentials, private keys, and personal configuration do not
   belong in the repository or release archives.

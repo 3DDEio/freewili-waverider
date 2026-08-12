@@ -90,5 +90,9 @@ def test_committed_native_release_artifacts_pass_fail_closed_gates():
     entry, segments = inspect_volatile_elf(
         ROOT / "native/dist/waverider_installer.elf"
     )
-    assert entry == SRAM_START + 0x178
+    # Linker layout can legitimately move as the installer changes. The public
+    # safety contract is that execution begins at an aligned address in
+    # volatile SRAM, not at one historical byte offset.
+    assert SRAM_START <= entry < SRAM_STOP
+    assert entry % 2 == 0
     assert segments

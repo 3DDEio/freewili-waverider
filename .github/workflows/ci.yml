@@ -14,12 +14,52 @@ jobs:
       matrix:
         python-version: ["3.11", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install '.[installer,dev]'
       - run: python -m pytest -q tests
-      - run: sh -n install.sh uninstall.sh bin/foxhuntctl bin/foxhunt-guard deploy/build-native-apps.sh deploy/build-release.sh
+      - run: python wilibsp/tools/check_app_repo.py .
+      - run: python tools/prepare_wilibsp.py
+      - run: sh -n install.sh uninstall.sh bin/foxhuntctl bin/foxhunt-guard deploy/build-native-apps.sh deploy/build-release.sh deploy/build-source-release.sh deploy/setup-native-ci-linux.sh
+      - run: sha256sum -c native/dist/SHA256SUMS
+      - run: cd vendor/debian-source/rtl-sdr-2.0.2-2 && sha256sum -c SHA256SUMS
+      - run: |
+          printf '%s  %s\n' \
+            4edd72c4f9a250a237a1d6d56a3120638d147560fd9e3d7e78a693b010bbb7f9 \
+            vendor/debian-arm64/librtlsdr0_2.0.2-2+b1_arm64.deb | sha256sum -c -
+          printf '%s  %s\n' \
+            d139e07182836a94244285f441ba8355ff7e953a58f03090837d203426d48e3e \
+            vendor/debian-arm64/rtl-sdr_2.0.2-2+b1_arm64.deb | sha256sum -c -
+      - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_display.uf2
+      - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_installer.uf2
       - run: sh deploy/build-release.sh
       - run: cd dist && sha256sum -c freewili-foxhunt-*.tar.gz.sha256
+      - run: sh deploy/build-source-release.sh
+      - run: cd dist && sha256sum -c freewili-waverider-source-*.tar.gz.sha256
+
+  native-release:
+    name: native-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+      - run: sh deploy/setup-native-ci-linux.sh
+      - name: Rebuild and compare release UF2 files
+        run: |
+          mkdir -p build/committed-native
+          cp native/dist/waverider_display.uf2 build/committed-native/
+          cp native/dist/waverider_installer.uf2 build/committed-native/
+          BUILD_DIR="$GITHUB_WORKSPACE/build/ci-native" sh deploy/build-native-apps.sh
+          cmp build/committed-native/waverider_display.uf2 native/dist/waverider_display.uf2
+          cmp build/committed-native/waverider_installer.uf2 native/dist/waverider_installer.uf2
+      - run: sha256sum -c native/dist/SHA256SUMS
+      - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_display.uf2
+      - run: python wilibsp/tools/check_app_uf2.py native/dist/waverider_installer.uf2

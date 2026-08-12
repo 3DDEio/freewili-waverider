@@ -1,0 +1,3 @@
+[submodule "wilibsp"]
+	path = wilibsp
+	url = https://github.com/freewili/wilibsp.git

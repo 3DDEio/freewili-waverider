@@ -15,23 +15,48 @@ from pathlib import Path
 import serial
 
 
+# Only these files are required on CM0 Linux. Keeping an explicit allowlist
+# prevents a maintainer's untracked files, local toolchains, .env files, or
+# hardware dumps from entering a public or serial installation payload.
+CM0_FILES = (
+    Path("bin/foxhunt-guard"),
+    Path("bin/foxhuntctl"),
+    Path("config/default-list.json"),
+    Path("deploy/freewili-foxhunt-guard.service"),
+    Path("deploy/freewili-foxhunt.service"),
+    Path("install.sh"),
+    Path("pyproject.toml"),
+    Path("vendor/debian-arm64/librtlsdr0_2.0.2-2+b1_arm64.deb"),
+    Path("vendor/debian-arm64/rtl-sdr_2.0.2-2+b1_arm64.deb"),
+)
+CM0_TREES = (Path("src/freewili_foxhunt"),)
+
+
 def make_archive(root: Path) -> bytes:
-    excluded = {".git", "build", "dist", "__pycache__", ".pytest_cache"}
+    paths: list[Path] = []
+    for relative in CM0_FILES:
+        path = root / relative
+        if not path.is_file():
+            raise FileNotFoundError(f"required CM0 installation file is missing: {relative}")
+        paths.append(path)
+    for relative in CM0_TREES:
+        tree = root / relative
+        if not tree.is_dir():
+            raise FileNotFoundError(f"required CM0 installation tree is missing: {relative}")
+        paths.extend(
+            path
+            for path in sorted(tree.rglob("*"))
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix != ".pyc"
+        )
+
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz") as archive:
-        for path in sorted(root.rglob("*")):
-            if any(part in excluded for part in path.parts):
-                continue
+        for path in sorted(paths):
             relative = path.relative_to(root)
-            # Splash assets belong to Main SD and are installed by the separate
-            # checksummed firmware uploader. Never send them through the much
-            # slower CM0 mailbox tunnel; public release archives still include
-            # the complete source PNG and native FWI files.
-            if relative.parts and relative.parts[0] == "assets":
-                continue
             archive.add(
-                path,
-                arcname=Path("freewili-foxhunt") / path.relative_to(root),
+                path, arcname=Path("freewili-foxhunt") / relative,
                 recursive=False,
             )
     return stream.getvalue()

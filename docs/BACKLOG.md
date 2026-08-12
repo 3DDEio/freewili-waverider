@@ -4,6 +4,72 @@ The requirement-by-requirement connected-device exit gate is maintained in
 `docs/COMPLETION_AUDIT.md`. Host tests and injected input do not close physical
 hardware observations in that audit.
 
+## Release audit — 2026-08-12
+
+- [x] Pin the official WiliBSP external-app dependency and its nested OneWili
+  commit, preserve WaveRider's reviewed deltas as explicit patches, and make
+  clean clones fail on dependency drift.
+- [x] Add exact Debian rtl-sdr corresponding source, component license copies,
+  checksum validation, pinned GitHub Actions, and a protected-main release-tag
+  gate.
+- [x] Make CI and the tag-release workflow provision checksum-pinned native
+  tools, rebuild both UF2 files from source, and byte-compare them with the
+  committed release candidates before publication.
+- [x] Generate signed GitHub/Sigstore provenance attestations for every
+  downloadable archive, UF2, and native checksum manifest.
+- [x] Require `native-release` alongside Python 3.11 and 3.13 on protected
+  `main`, so source-to-UF2 equality cannot be bypassed at merge.
+- [x] Restrict the serial installer to an explicit CM0 runtime manifest so
+  untracked files, local toolchains, secrets, device dumps, and unrelated
+  maintenance work cannot be transferred.
+- [x] Verify exact RTL-SDR package hashes and versions on CM0, compile the
+  staged Python runtime, replace its directory atomically, and retain one
+  previous runtime tree for rollback inspection. Install errors and interrupt
+  signals now restore that runtime together with both command wrappers and both
+  systemd units, so the integration cannot remain at a mixed version.
+- [x] Make native upgrades transactional: stage and byte-compare the candidate,
+  retain the prior app under `/appdata/waverider/`, restore on failure, and
+  recover a verified backup or first-install staging file after power loss
+  between renames.
+- [x] Keep the separate FX0177 quiet/dark stock-firmware patch out of the
+  WaveRider release archive.
+- [x] Make the public device-install archive deterministic and exclude local
+  Python build metadata plus release-only compiler provisioning.
+- [x] Add a deterministic complete-source release archive containing the exact
+  pinned WiliBSP and nested OneWili contents; do not rely on GitHub's generated
+  tag archive, which preserves only submodule gitlinks.
+- [ ] **STOP SHIP:** obtain explicit OneWili source/binary redistribution terms
+  from FreeWili. The public upstream checkout has no license, and WaveRider
+  links and patches it. Do not tag a supported release based only on public
+  repository visibility.
+- [x] Rebuild the finalized native source twice in clean build directories and
+  prove both UF2 hashes match; validate the resulting installer/display hashes,
+  release archive, and clean-extraction dry run. Final candidate hashes are
+  `79eb567a...` (Display UF2), `fc35827f...` (installer UF2), and
+  the exact deterministic device-install digest recorded in its generated
+  `.tar.gz.sha256` sidecar.
+- [x] Re-run the complete supported host regression after the final rollback
+  change: 211 tests pass, shell syntax and workflow YAML parse cleanly, all
+  native and Debian source manifests verify, and independent native builds
+  remain byte-identical.
+- [ ] Install those exact rebuilt artifacts on FX0177, confirm staged upgrade
+  plus retained backup, launch from **Apps → Radio → WaveRider**, and verify the
+  standard five-second Page About screen before release. The install, backup,
+  byte verification, promotion, and launch now pass; only the physical About
+  observation remains. A final replay was attempted on 2026-08-12, but the
+  CMSIS-DAP probe was no longer exposed to OpenOCD; this did not alter the
+  device and remains a hands-on acceptance item.
+- [x] Exercise the native installer with Main's app SD both unavailable and
+  mounted. The unavailable `none`/`NO_CARD` path changed no app files; after a
+  normal vendor software restart remounted the card as `main`, the same build
+  staged and byte-verified 204,288 bytes, retained the previous UF2 under
+  `/appdata/waverider`, promoted the candidate, and launched it from
+  `/apps/Radio`. The failure screen now says `APP SD NOT MOUNTED` and
+  `RESTART WILI + RETRY` instead of presenting a generic diagnostic dead end.
+- [ ] Complete the remaining connected-device observations in
+  `docs/COMPLETION_AUDIT.md`, then merge protected `main` and create the exact
+  matching tag. Do not merge/tag around a failed or pending gate.
+
 ## Approved product decision
 
 The user-facing application name is **WaveRider**. Until the live RF cadence

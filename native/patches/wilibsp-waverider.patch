@@ -1,0 +1,131 @@
+diff --git a/bsp/input/picpwr.c b/bsp/input/picpwr.c
+index f11df13..3e938be 100644
+--- a/bsp/input/picpwr.c
++++ b/bsp/input/picpwr.c
+@@ -14,6 +14,7 @@
+ static picpwr_cfg_t    s_cache;
+ static absolute_time_t s_last_send;
+ static bool            s_sent_any;
++static uint32_t        s_main_control_bits;
+
+ bool picpwr_rails(uint32_t *rails_out)
+ {
+@@ -61,7 +62,8 @@ bool picpwr_send(const picpwr_cfg_t *cfg)
+     clamped.awake &= PICPWR_ZONE_MASK_ALL;
+     clamped.sleep &= PICPWR_ZONE_MASK_ALL;
+     uint8_t frame[PICPWR_FRAME_LEN];
+-    picpwr_frame_build(frame, &clamped);
++    clamped.awake |= s_main_control_bits;
++    picpwr_frame_build_main(frame, &clamped);
+     (void)uartkbd_cmd_send(frame, sizeof frame);
+     s_cache = clamped;
+     s_last_send = get_absolute_time();
+@@ -69,6 +71,28 @@ bool picpwr_send(const picpwr_cfg_t *cfg)
+     return true;
+ }
+
++bool picpwr_apply_main_awake_mask(uint32_t zone_mask)
++{
++    if (s_sent_any &&
++        absolute_time_diff_us(s_last_send, get_absolute_time())
++            < (int64_t)PICPWR_SPACING_MS * 1000)
++        return false;
++    zone_mask &= PICPWR_ZONE_MASK_MAIN;
++    s_main_control_bits = zone_mask & ~PICPWR_ZONE_MASK_ALL;
++    picpwr_cfg_t cfg = s_cache;
++    cfg.awake = zone_mask;
++    cfg.sleep &= PICPWR_ZONE_MASK_ALL;
++    uint8_t frame[PICPWR_FRAME_LEN];
++    picpwr_frame_build_main(frame, &cfg);
++    (void)uartkbd_cmd_send(frame, sizeof frame);
++    s_cache.awake = zone_mask & PICPWR_ZONE_MASK_ALL;
++    s_cache.sleep = cfg.sleep;
++    s_last_send = get_absolute_time();
++    s_sent_any = true;
++    DIAG("picpwr: MAIN awake mask applied=0x%x\n", (unsigned)zone_mask);
++    return true;
++}
++
+ bool picpwr_ensure_awake(uint32_t zone_bits)
+ {
+     zone_bits &= PICPWR_ZONE_MASK_ALL;
+diff --git a/bsp/input/picpwr.h b/bsp/input/picpwr.h
+index 0cb0103..bc21c70 100644
+--- a/bsp/input/picpwr.h
++++ b/bsp/input/picpwr.h
+@@ -63,4 +63,9 @@ bool picpwr_cycle(uint32_t zone_bits);
+  * single stale snapshot or an in-progress apply never causes a storm. */
+ void picpwr_task(void);
+
++/* Apply MAIN's authoritative 20-bit FwGUI 0x6D awake mask. Unlike normal app
++ * requests this may include the three board-control bits, and remembers them
++ * so later keep-awake rail updates cannot pull CM0_RUNPG back into reset. */
++bool picpwr_apply_main_awake_mask(uint32_t zone_mask);
++
+ #endif /* PICPWR_H */
+diff --git a/bsp/input/picpwr_frame.c b/bsp/input/picpwr_frame.c
+index 32337ce..4938f54 100644
+--- a/bsp/input/picpwr_frame.c
++++ b/bsp/input/picpwr_frame.c
+@@ -1,13 +1,14 @@
+ /* picpwr_frame — see picpwr_frame.h. */
+ #include "picpwr_frame.h"
+
+-size_t picpwr_frame_build(uint8_t out[PICPWR_FRAME_LEN],
+-                          const picpwr_cfg_t *cfg)
++static size_t frame_build_masked(uint8_t out[PICPWR_FRAME_LEN],
++                                 const picpwr_cfg_t *cfg,
++                                 uint32_t awake_mask)
+ {
+     /* Mask bits above zone 17 are reserved and must be zero on the wire
+      * (docs/drivers/power.md). Enforced here so no caller can emit
+      * them. */
+-    uint32_t awake = cfg->awake & PICPWR_ZONE_MASK_ALL;
++    uint32_t awake = cfg->awake & awake_mask;
+     uint32_t sleep = cfg->sleep & PICPWR_ZONE_MASK_ALL;
+     out[0]  = 0xB0;                              /* command sync */
+     out[1]  = 0x00;                              /* power-zone id */
+@@ -26,6 +27,18 @@ size_t picpwr_frame_build(uint8_t out[PICPWR_FRAME_LEN],
+     return PICPWR_FRAME_LEN;
+ }
+
++size_t picpwr_frame_build(uint8_t out[PICPWR_FRAME_LEN],
++                          const picpwr_cfg_t *cfg)
++{
++    return frame_build_masked(out, cfg, PICPWR_ZONE_MASK_ALL);
++}
++
++size_t picpwr_frame_build_main(uint8_t out[PICPWR_FRAME_LEN],
++                               const picpwr_cfg_t *cfg)
++{
++    return frame_build_masked(out, cfg, PICPWR_ZONE_MASK_MAIN);
++}
++
+ /* Rail-state positions inside the status payload: zone N reads from
+  * payload[byte] & mask, high = powered. */
+ typedef struct { uint8_t byte, mask; } rail_pos_t;
+diff --git a/bsp/input/picpwr_frame.h b/bsp/input/picpwr_frame.h
+index 87a7207..e0916d0 100644
+--- a/bsp/input/picpwr_frame.h
++++ b/bsp/input/picpwr_frame.h
+@@ -37,6 +37,7 @@
+  * MUST BE ZERO (docs/drivers/power.md). picpwr_frame_build() clears
+  * them from every frame; nothing in this API can set them. */
+ #define PICPWR_ZONE_MASK_ALL 0x01FFFFu
++#define PICPWR_ZONE_MASK_MAIN 0x0FFFFFu
+
+ static inline uint32_t picpwr_zone_bit(int zone) {
+     return 1u << (zone - 1);
+@@ -58,6 +59,12 @@ typedef struct {
+ size_t picpwr_frame_build(uint8_t out[PICPWR_FRAME_LEN],
+                           const picpwr_cfg_t *cfg);
+
++/* Build the complete 20-bit awake mask used only when MAIN forwards its
++ * authoritative FwGUI 0x6D power command. Application callers must use the
++ * 17-zone builder above; bits 18-20 are board control lines. */
++size_t picpwr_frame_build_main(uint8_t out[PICPWR_FRAME_LEN],
++                               const picpwr_cfg_t *cfg);
++
+ /* Decode live rail state (zones 1..17 -> bits 0..16) from a 20-byte
+  * coprocessor status payload (the bytes between sync/id and checksum).
+  * High = rail powered. */
