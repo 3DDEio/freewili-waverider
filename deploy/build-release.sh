@@ -7,6 +7,14 @@ VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$ROOT/pyproject.toml")
 BUILD_DIR="$ROOT/build/freewili-foxhunt-$VERSION"
 ARCHIVE="$ROOT/dist/freewili-foxhunt-$VERSION.tar.gz"
 SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-0}
+COPYFILE_DISABLE=1
+export COPYFILE_DISABLE
+MANIFEST=$(mktemp /tmp/waverider-device-manifest.XXXXXX)
+
+cleanup() {
+    rm -f "$MANIFEST"
+}
+trap cleanup EXIT HUP INT TERM
 
 rm -rf "$ROOT/build/freewili-foxhunt-$VERSION"
 mkdir -p "$BUILD_DIR" "$ROOT/dist"
@@ -26,25 +34,18 @@ done
     cd "$ROOT"
     sha256sum -c native/dist/SHA256SUMS
 )
-cp -a \
-    "$ROOT/AGENTS.md" \
-    "$ROOT/CHANGELOG.md" \
-    "$ROOT/CONTRIBUTING.md" \
-    "$ROOT/COPYRIGHT" \
-    "$ROOT/HISTORY.md" \
-    "$ROOT/LICENSE" \
-    "$ROOT/LICENSES.md" \
-    "$ROOT/README.md" \
-    "$ROOT/SECURITY.md" \
-    "$ROOT/THIRD_PARTY_NOTICES.md" \
-    "$ROOT/CMakeLists.txt" \
-    "$ROOT/.gitmodules" \
-    "$ROOT/pyproject.toml" \
-    "$ROOT/install.sh" \
-    "$ROOT/uninstall.sh" \
-    "$BUILD_DIR/"
-cp -a "$ROOT/LICENSES" "$BUILD_DIR/"
-cp -a "$ROOT/assets" "$ROOT/bin" "$ROOT/config" "$ROOT/deploy" "$ROOT/docs" "$ROOT/native" "$ROOT/src" "$ROOT/tools" "$ROOT/vendor" "$BUILD_DIR/"
+# Copy only tracked, explicitly allowlisted paths. This prevents an ignored
+# .env, device capture, compiler output, or editor file from leaking into a
+# public archive merely because it sits below a copied directory.
+git -C "$ROOT" ls-files -z -- \
+    AGENTS.md CHANGELOG.md CONTRIBUTING.md COPYRIGHT HISTORY.md LICENSE \
+    LICENSES LICENSES.md README.md SECURITY.md THIRD_PARTY_NOTICES.md \
+    CMakeLists.txt .gitmodules pyproject.toml install.sh uninstall.sh \
+    assets bin config deploy docs native src tools vendor >"$MANIFEST"
+(
+    cd "$ROOT"
+    tar --null -T "$MANIFEST" -cf -
+) | tar -xf - -C "$BUILD_DIR"
 # CI provisioning is maintainer/release infrastructure. It is intentionally
 # absent from the user-facing device-install bundle, which has no native-source
 # checkout or reason to download a compiler toolchain.
@@ -61,11 +62,8 @@ rm -f \
 find "$BUILD_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$BUILD_DIR" -type f -name '*.pyc' -delete
 rm -rf "$BUILD_DIR/src/freewili_foxhunt.egg-info"
-find "$BUILD_DIR" -type f -exec touch -h -t 197001010000 {} +
-find "$BUILD_DIR" -type d -exec touch -h -t 197001010000 {} +
-LC_ALL=C tar --uid 0 --gid 0 --uname root --gname root \
-    -C "$ROOT/build" -cf - "freewili-foxhunt-$VERSION" | \
-    gzip -n >"$ARCHIVE"
+SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
+    python3 "$ROOT/tools/build_deterministic_tar.py" "$BUILD_DIR" "$ARCHIVE"
 digest=$(sha256sum "$ARCHIVE" | cut -d' ' -f1)
 printf '%s  %s\n' "$digest" "$(basename "$ARCHIVE")" >"$ARCHIVE.sha256"
 echo "$ARCHIVE"

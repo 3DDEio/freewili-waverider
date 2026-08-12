@@ -37,16 +37,32 @@ if [ -n "$(git -C "$ROOT" ls-files --others --exclude-standard)" ]; then
     exit 1
 fi
 
-# Normalize the source state before archiving: reviewed WaveRider vendor
-# deltas are present regardless of whether the caller previously built native
-# artifacts. The helper is idempotent.
-python3 "$ROOT/tools/prepare_wilibsp.py"
-git -C "$ROOT" ls-files --recurse-submodules -z >"$MANIFEST"
+# Verify the pinned source without changing either vendor worktree. The archive
+# intentionally carries pristine vendor source plus WaveRider's reviewed patch
+# files, exactly like a recursive clone.
+python3 "$ROOT/tools/prepare_wilibsp.py" --verify-only
+git -C "$ROOT" ls-files -z -- . ':!wilibsp' >"$MANIFEST"
 mkdir -p "$STAGE/$PREFIX" "$ROOT/dist"
 (
     cd "$ROOT"
     tar --null -T "$MANIFEST" -cf -
 ) | tar -xf - -C "$STAGE/$PREFIX"
+# Read vendor source from the recorded commits rather than from their working
+# trees. Native builds apply patches in-place, so this keeps the complete-source
+# archive pristine and reproducible even when it is built after a native build.
+mkdir -p "$STAGE/$PREFIX/wilibsp" "$STAGE/$PREFIX/wilibsp/libs/onewili"
+git -C "$ROOT/wilibsp" archive --format=tar HEAD | \
+    tar -xf - -C "$STAGE/$PREFIX/wilibsp"
+git -C "$ROOT/wilibsp/libs/onewili" archive --format=tar HEAD | \
+    tar -xf - -C "$STAGE/$PREFIX/wilibsp/libs/onewili"
+# Keep the unrelated, optional stock-firmware night-default modification out of
+# WaveRider's source release just as it is kept out of the install bundle.
+rm -f \
+    "$STAGE/$PREFIX/docs/FW2_V07_STARTUP_PATCH.md" \
+    "$STAGE/$PREFIX/docs/NIGHT_DEFAULTS.md" \
+    "$STAGE/$PREFIX/tools/fw2_patch_display_startup.py" \
+    "$STAGE/$PREFIX/tools/fw2_set_night_defaults.py"
+rm -rf "$STAGE/$PREFIX/test-beacon"
 (
     cd "$STAGE/$PREFIX"
     python3 tools/prepare_wilibsp.py \
@@ -55,10 +71,7 @@ mkdir -p "$STAGE/$PREFIX" "$ROOT/dist"
 
 # The checked-out vendor trees are kept pristine. WaveRider's reviewed deltas
 # remain explicit patch files and are applied by tools/prepare_wilibsp.py.
-find "$STAGE/$PREFIX" -type f -exec touch -h -t 197001010000 {} +
-find "$STAGE/$PREFIX" -type d -exec touch -h -t 197001010000 {} +
-LC_ALL=C tar --uid 0 --gid 0 --uname root --gname root \
-    -C "$STAGE" -cf - "$PREFIX" | gzip -n >"$ARCHIVE"
+python3 "$ROOT/tools/build_deterministic_tar.py" "$STAGE/$PREFIX" "$ARCHIVE"
 digest=$(sha256sum "$ARCHIVE" | cut -d' ' -f1)
 printf '%s  %s\n' "$digest" "$(basename "$ARCHIVE")" >"$ARCHIVE.sha256"
 echo "$ARCHIVE"

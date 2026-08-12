@@ -34,10 +34,21 @@ hardware observations in that audit.
 - [x] Keep the separate FX0177 quiet/dark stock-firmware patch out of the
   WaveRider release archive.
 - [x] Make the public device-install archive deterministic and exclude local
-  Python build metadata plus release-only compiler provisioning.
+  Python build metadata plus release-only compiler provisioning. The final
+  builder copies only tracked, explicit allowlist paths and uses one portable
+  Python tar writer on macOS and Linux, so ignored local files cannot leak into
+  a public bundle and GNU/BSD tar flag differences cannot create empty output.
 - [x] Add a deterministic complete-source release archive containing the exact
   pinned WiliBSP and nested OneWili contents; do not rely on GitHub's generated
-  tag archive, which preserves only submodule gitlinks.
+  tag archive, which preserves only submodule gitlinks. It reads the pinned
+  vendor commits directly, never mutates either vendor working tree, and keeps
+  the separate stock-firmware and beacon work out of WaveRider distribution.
+- [x] Exercise the release gates on GitHub-hosted Linux. The first public CI
+  pass exposed macOS-only tar flags and one interrupted Picotool transfer; the
+  builders are now portable, downloads resume/retry under publisher hashes,
+  and checkout/setup-python are pinned to their current Node 24 releases.
+- [ ] Confirm the repaired Python 3.11/3.13 and source-to-UF2 GitHub jobs pass
+  on the exact pushed release-candidate commit before merge or tag creation.
 - [ ] **STOP SHIP:** obtain explicit OneWili source/binary redistribution terms
   from FreeWili. The public upstream checkout has no license, and WaveRider
   links and patches it. Do not tag a supported release based only on public
@@ -49,7 +60,7 @@ hardware observations in that audit.
   the exact deterministic device-install digest recorded in its generated
   `.tar.gz.sha256` sidecar.
 - [x] Re-run the complete supported host regression after the final rollback
-  change: 211 tests pass, shell syntax and workflow YAML parse cleanly, all
+  change: 212 tests pass, shell syntax and workflow YAML parse cleanly, all
   native and Debian source manifests verify, and independent native builds
   remain byte-identical.
 - [ ] Install those exact rebuilt artifacts on FX0177, confirm staged upgrade
