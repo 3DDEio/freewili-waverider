@@ -43,8 +43,13 @@
 #define COL_ORCA_INK  RGB565_BE(3, 8, 14)
 #define COL_ORCA_SADDLE RGB565_BE(112, 139, 148)
 #define COL_ORCA_WHITE RGB565_BE(238, 246, 247)
+#define COL_CYBER_CYAN RGB565_BE(42, 232, 255)
+#define COL_CYBER_MAGENTA RGB565_BE(255, 75, 210)
+#define COL_CYBER_GRID RGB565_BE(12, 48, 58)
 
 #define WAVERIDER_SPLASH_MS 3000u
+#define CREATOR_SPLASH_MS 6000u
+#define CREATOR_SEQUENCE_TIMEOUT_US 4000000u
 
 #define LIST_X 4
 #define LIST_Y 30
@@ -135,6 +140,7 @@ typedef enum {
     UI_LISTS,
     UI_DELETE_CONFIRM,
     UI_SETTINGS,
+    UI_CREATOR_CREDITS,
     UI_AUDIO,
     UI_WATERFALL_SPAN,
     UI_CW_DECODER,
@@ -174,6 +180,11 @@ static bool s_alert_enabled;
 static int32_t s_alert_threshold_tenths = -500;
 static bool s_cw_enabled = true;
 static uint8_t s_settings_cursor;
+static uint8_t s_creator_sequence_index;
+static uint8_t s_creator_sequence_start_cursor;
+static uint32_t s_creator_frame;
+static uint64_t s_creator_sequence_deadline_us;
+static uint64_t s_creator_until_us;
 static bool s_alert_armed = true;
 static uint64_t s_last_alert_us;
 static bool s_haptic_on;
@@ -209,6 +220,7 @@ static void send_command(uint8_t opcode, uint8_t argument);
 static void enter_live_view(bool clear_plot);
 static void draw_library(void);
 static void draw_settings(void);
+static void draw_creator_credits_frame(uint32_t frame);
 static void draw_audio_page(void);
 static void draw_waterfall_span(void);
 static void draw_cw_decoder(void);
@@ -433,6 +445,125 @@ static void show_splash(void) {
             fw2_app_recovery_sleep_ms(10);
         }
     }
+}
+
+static void draw_creator_credits_frame(uint32_t frame) {
+    /* This is intentionally an RF operations console, not a generic neon
+     * title card: the animated trace resolves into two equal creator nodes. */
+    fb_fill_rect(0, 0, ST7796_W, ST7796_H, COL_BG);
+
+    for (int x = 14; x < ST7796_W - 10; x += 30)
+        fb_fill_rect(x, 12, 1, 296, COL_CYBER_GRID);
+    for (int y = 12; y < ST7796_H - 10; y += 24)
+        fb_fill_rect(12, y, 456, 1, COL_CYBER_GRID);
+
+    int scan_y = 14 + (int)((frame * 9u) % 290u);
+    fb_fill_rect(12, scan_y, 456, 1, COL_CYBER_CYAN);
+    if (scan_y + 1 < 308)
+        fb_fill_rect(12, scan_y + 1, 456, 1, COL_CYBER_GRID);
+
+    fb_fill_rect(10, 10, 460, 2, COL_CYBER_CYAN);
+    fb_fill_rect(10, 308, 460, 2, COL_CYBER_MAGENTA);
+    fb_fill_rect(10, 10, 2, 300, COL_CYBER_CYAN);
+    fb_fill_rect(468, 10, 2, 300, COL_CYBER_MAGENTA);
+    fb_draw_text(18, 18, 1, COL_CYBER_CYAN, COL_BG,
+                 "// WAVERIDER::CREATOR UPLINK");
+    fb_draw_text(372, 18, 1, COL_CYBER_MAGENTA, COL_BG,
+                 "ACCESS OK");
+    fb_draw_text(84, 40, 4, COL_WHITE, COL_BG, "SIGNAL ORIGIN");
+
+    /* Animated frequency trace: phase motion provides energy while mirrored
+     * peaks lead the eye into the two equal-weight creator cards below. */
+    static const int8_t trace[] = {
+        0, 1, -1, 2, -2, 4, -4, 8, -12, 20, -12, 8, -4, 3, -2, 1,
+        0, -1, 2, -2, 4, -7, 11, -18, 26, -18, 11, -7, 4, -2, 2, -1,
+    };
+    int last_x = 16;
+    int last_y = 112 + trace[frame % (sizeof trace / sizeof trace[0])];
+    for (int x = 17; x < 464; x++) {
+        uint32_t index = ((uint32_t)x / 4u + frame) %
+                         (sizeof trace / sizeof trace[0]);
+        int y = 112 + trace[index];
+        fb_draw_line(last_x, last_y, x, y, 1,
+                     x < 240 ? COL_CYBER_CYAN : COL_CYBER_MAGENTA);
+        last_x = x;
+        last_y = y;
+    }
+    int pulse_x = 18 + (int)((frame * 13u) % 444u);
+    fb_fill_ellipse(pulse_x, 112, 4, 4,
+                    pulse_x < 240 ? COL_WHITE : COL_YELLOW);
+
+    fb_fill_rect(24, 144, 204, 96, COL_PANEL);
+    fb_fill_rect(252, 144, 204, 96, COL_PANEL);
+    fb_fill_rect(24, 144, 204, 2, COL_CYBER_CYAN);
+    fb_fill_rect(252, 144, 204, 2, COL_CYBER_MAGENTA);
+    fb_fill_rect(24, 238, 204, 2, COL_CYBER_CYAN);
+    fb_fill_rect(252, 238, 204, 2, COL_CYBER_MAGENTA);
+    fb_fill_rect(24, 144, 2, 96, COL_CYBER_CYAN);
+    fb_fill_rect(226, 144, 2, 96, COL_CYBER_CYAN);
+    fb_fill_rect(252, 144, 2, 96, COL_CYBER_MAGENTA);
+    fb_fill_rect(454, 144, 2, 96, COL_CYBER_MAGENTA);
+    fb_draw_text(38, 156, 1, COL_CYBER_CYAN, COL_PANEL,
+                 "ORIGIN NODE // 01");
+    fb_draw_text(266, 156, 1, COL_CYBER_MAGENTA, COL_PANEL,
+                 "ORIGIN NODE // 02");
+    fb_draw_text(72, 184, 3, COL_WHITE, COL_PANEL, "KO6FQY");
+    fb_draw_text(300, 184, 3, COL_WHITE, COL_PANEL, "KO6FQJ");
+    fb_draw_text(84, 219, 1, COL_CYBER_CYAN, COL_PANEL, "CREATOR");
+    fb_draw_text(312, 219, 1, COL_CYBER_MAGENTA, COL_PANEL, "CREATOR");
+
+    fb_fill_rect(228, 190, 24, 2, COL_BORDER);
+    fb_fill_triangle(236, 184, 244, 191, 236, 198, COL_WHITE);
+    fb_fill_triangle(244, 184, 252, 191, 244, 198, COL_WHITE);
+    fb_draw_text(126, 260, 2, COL_TEXT, COL_BG,
+                 "CREATED FOR THE HUNT");
+    fb_draw_text(154, 284, 1, COL_GREEN, COL_BG,
+                 "RIDE THE SIGNAL // TOGETHER");
+    fb_draw_text(174, 299, 1, COL_DIM, COL_BG,
+                 "ANY KEY OR TAP TO RETURN");
+    s_fb_dirty = true;
+}
+
+static void show_creator_credits(void) {
+    s_ui_mode = UI_CREATOR_CREDITS;
+    s_creator_frame = 0u;
+    s_creator_until_us = time_us_64() +
+                         (uint64_t)CREATOR_SPLASH_MS * 1000u;
+    draw_creator_credits_frame(s_creator_frame++);
+}
+
+static bool creator_sequence_step(uint8_t button, uint64_t now) {
+    static const uint8_t sequence[] = {
+        UARTKBD_BTN_NAV_UP, UARTKBD_BTN_NAV_UP,
+        UARTKBD_BTN_NAV_DOWN, UARTKBD_BTN_NAV_DOWN,
+        UARTKBD_BTN_NAV_LEFT, UARTKBD_BTN_NAV_RIGHT,
+        UARTKBD_BTN_NAV_LEFT, UARTKBD_BTN_NAV_RIGHT,
+    };
+    if (s_creator_sequence_index != 0u &&
+        now > s_creator_sequence_deadline_us)
+        s_creator_sequence_index = 0u;
+
+    if (button == sequence[s_creator_sequence_index]) {
+        if (s_creator_sequence_index == 0u)
+            s_creator_sequence_start_cursor = s_settings_cursor;
+        s_creator_sequence_index++;
+        s_creator_sequence_deadline_us = now + CREATOR_SEQUENCE_TIMEOUT_US;
+    } else if (button == sequence[0]) {
+        s_creator_sequence_start_cursor = s_settings_cursor;
+        s_creator_sequence_index = 1u;
+        s_creator_sequence_deadline_us = now + CREATOR_SEQUENCE_TIMEOUT_US;
+    } else {
+        s_creator_sequence_index = 0u;
+        return false;
+    }
+
+    if (s_creator_sequence_index < sizeof sequence) return false;
+    s_creator_sequence_index = 0u;
+    /* Navigation performed while entering the secret sequence must not leave
+     * Settings on a surprising row after the credits page closes. */
+    s_settings_cursor = s_creator_sequence_start_cursor;
+    show_creator_credits();
+    return true;
 }
 
 static void format_frequency(char *out, size_t cap, uint32_t hz) {
@@ -1828,6 +1959,22 @@ static void update_leds(void) {
         ws2812_show();
         return;
     }
+    if (s_ui_mode == UI_CREATOR_CREDITS) {
+        int active = (int)((now / 100000u) % 12u);
+        if (active > 6) active = 12 - active;
+        for (int i = 0; i < 7; i++) {
+            rgb_t color = {
+                .r = (uint8_t)(18 + i * 21),
+                .g = (uint8_t)(95 - i * 8),
+                .b = (uint8_t)(130 - i * 4),
+            };
+            if (i == active)
+                color = (rgb_t){.r = 180, .g = 180, .b = 180};
+            ws2812_set_pixel((uint)i, color);
+        }
+        ws2812_show();
+        return;
+    }
     if (s_ui_mode == UI_LISTS_LOADING || s_ui_mode == UI_LISTS ||
         s_ui_mode == UI_DELETE_CONFIRM || s_ui_mode == UI_ADD_FREQUENCY ||
         s_ui_mode == UI_SETTINGS || s_ui_mode == UI_AUDIO ||
@@ -2014,6 +2161,10 @@ static void poll_list(void) {
             enter_live_view(false);
         else if (s_ui_mode == UI_SETTINGS)
             draw_settings();
+        else if (s_ui_mode == UI_CREATOR_CREDITS) {
+            /* The 10 fps UI timer owns this animation. A list-state commit
+             * must not replace the Easter egg with the frequency list. */
+        }
         else if (s_ui_mode == UI_AUDIO)
             draw_audio_page();
         else if (s_ui_mode == UI_WATERFALL_SPAN)
@@ -2135,7 +2286,13 @@ static void handle_buttons(void) {
         DIAG("waverider: button id=%u pressed=%u\n",
              (unsigned)event.btn, event.pressed ? 1u : 0u);
         if (!event.pressed) continue;
+        if (s_ui_mode == UI_CREATOR_CREDITS) {
+            s_ui_mode = UI_SETTINGS;
+            draw_settings();
+            continue;
+        }
         if (s_ui_mode == UI_SETTINGS) {
+            if (creator_sequence_step(event.btn, time_us_64())) continue;
             switch (event.btn) {
             case UARTKBD_BTN_NAV_LEFT:
             case UARTKBD_BTN_NAV_UP:
@@ -2582,7 +2739,10 @@ static void handle_touch(void) {
     bool down = ft6336_poll(&x, &y);
     if (down && !was_down) {
         DIAG("waverider: touch x=%u y=%u\n", (unsigned)x, (unsigned)y);
-        if (s_ui_mode == UI_ADD_FREQUENCY) {
+        if (s_ui_mode == UI_CREATOR_CREDITS) {
+            s_ui_mode = UI_SETTINGS;
+            draw_settings();
+        } else if (s_ui_mode == UI_ADD_FREQUENCY) {
             bool handled = false;
             for (int index = 0; index < 7; index++) {
                 int box_x = 24 + index * 44 + (index >= 4 ? 16 : 0);
@@ -3075,14 +3235,27 @@ int main(void) {
             next_led_refresh = now + 250000u;
         }
         if (now >= next_ui_refresh) {
-            if (s_ui_mode == UI_STARTUP)
-                draw_startup_status();
-            else if (s_ui_mode == UI_STATUS || s_ui_mode == UI_REFRESH ||
-                     s_ui_mode == UI_FAULT)
-                draw_receiver_status();
-            else if (s_ui_mode == UI_POCKET_ALERT && !st7796_flush_busy())
-                draw_pocket_alert_dynamic();
-            next_ui_refresh = now + 500000u;
+            if (s_ui_mode == UI_CREATOR_CREDITS) {
+                if (now >= s_creator_until_us) {
+                    s_ui_mode = UI_SETTINGS;
+                    draw_settings();
+                    next_ui_refresh = now + 500000u;
+                } else {
+                    if (!st7796_flush_busy())
+                        draw_creator_credits_frame(s_creator_frame++);
+                    next_ui_refresh = now + 100000u;
+                }
+            } else {
+                if (s_ui_mode == UI_STARTUP)
+                    draw_startup_status();
+                else if (s_ui_mode == UI_STATUS || s_ui_mode == UI_REFRESH ||
+                         s_ui_mode == UI_FAULT)
+                    draw_receiver_status();
+                else if (s_ui_mode == UI_POCKET_ALERT &&
+                         !st7796_flush_busy())
+                    draw_pocket_alert_dynamic();
+                next_ui_refresh = now + 500000u;
+            }
         }
         if (now >= next_diag) {
             DIAG("waverider: link calls=%u ok=%u fail=%u last=%d drop=%u gui=%u/%02x kbd=%u/%u row=%u list=%u pending=%u\n",

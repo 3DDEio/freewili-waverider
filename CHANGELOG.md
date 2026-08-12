@@ -16,6 +16,8 @@ All notable public changes to WaveRider are recorded here. The format follows
   documentation index.
 - A six-position Waterfall Span slider in Settings covering the documented
   25 kHz through 2 MHz profiles with per-frequency persistence.
+- A hidden, animated cyber-RF creator-credits screen for KO6FQY and KO6FQJ,
+  with bounded display time and immediate key/touch dismissal.
 
 ### Changed
 
