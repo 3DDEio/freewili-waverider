@@ -26,8 +26,11 @@ corresponding physical behavior on the connected FreeWili 2.
   <https://github.com/3DDEio/freewili-waverider/releases/tag/v0.1.0-beta.1>
 - Software license: GPL-3.0-or-later.
 - Documentation and original artwork: CC BY-SA 4.0.
-- Protected `main`: both CI jobs and CODEOWNER review required; stale approvals
-  dismissed; force pushes and deletion blocked.
+- Protected `main`: Python 3.11, Python 3.13, and canonical native-release
+  checks required; linear history and resolved conversations required; force
+  pushes and deletion blocked; protections apply to administrators. Formal and
+  CODEOWNER approvals are optional for the sole-maintainer repository, and
+  only an account with write access can merge.
 - Security: secret scanning, push protection, web commit signoff, and private
   vulnerability reporting enabled.
 - Distribution blocker: the checked-out public OneWili source does not contain

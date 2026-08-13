@@ -344,10 +344,13 @@ Brand migration begins after the connected device demonstrates:
   dry-run gate. Public prerelease
   [`v0.1.0-beta.1`](https://github.com/3DDEio/freewili-waverider/releases/tag/v0.1.0-beta.1)
   was downloaded again from GitHub and its published checksum verified. The
-  protected `main` branch requires both Python 3.11 and 3.13 CI checks,
-  CODEOWNER review, linear history, and resolved review conversations; force
-  pushes and branch deletion are blocked. Secret scanning, push protection,
-  private vulnerability reporting, and web commit signoff are enabled.
+  protected `main` branch requires the Python 3.11, Python 3.13, and canonical
+  native-release checks, linear history, and resolved review conversations;
+  force pushes and branch deletion are blocked. Because the repository has one
+  maintainer, formal and CODEOWNER approvals are optional, but the protections
+  apply to administrators and only accounts with repository write access can
+  merge. Secret scanning, push protection, private vulnerability reporting,
+  and web commit signoff are enabled.
 - [x] Finish the current release-candidate repository pass: keep stable source
   paths, add a browsable documentation index and repository map, document the
   clone/install flow, rebuild the friendly Radio-category native artifacts,

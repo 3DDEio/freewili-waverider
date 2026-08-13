@@ -29,6 +29,13 @@ Thank you for helping improve a practical, receive-only foxhunting instrument.
 4. Add or update tests and documentation with the change.
 5. Open a pull request. Direct pushes to `main` are not accepted.
 
+WaveRider currently has one maintainer, so GitHub does not require a second
+person's approval or a CODEOWNER approval. A pull request can be merged only by
+an account with repository write access after the required Python 3.11, Python
+3.13, and canonical native-release checks pass and all review conversations are
+resolved. These protections apply to administrators; outside contributors may
+propose changes but cannot merge or push to `main`.
+
 ## Hardware claims
 
 - State whether a result is host-tested, injected on hardware, or physically
