@@ -6,9 +6,9 @@ hardware observations in that audit.
 
 ## Distribution cleanup — 2026-08-17
 
-- [x] Remove committed UF2/ELF products. CI now creates two clean native builds,
-  compares every generated product byte-for-byte, validates the UF2 memory
-  targets, and packages only the verified outputs.
+- [x] Remove committed UF2/ELF products. CI now creates two clean native builds
+  at the same canonical path, compares every generated product byte-for-byte,
+  validates the UF2 memory targets, and packages only the verified outputs.
 - [x] Remove the unrelated stock-startup modification, external test-beacon
   fixture, obsolete research placeholder, internal design notes, reconstructed
   history file, and unreferenced bench-only utilities from the WaveRider repo.
@@ -75,8 +75,8 @@ hardware observations in that audit.
   from FreeWili. The public upstream checkout has no license, and WaveRider
   links and patches it. Do not tag a supported release based only on public
   repository visibility.
-- [x] Rebuild the finalized native source twice in clean build directories and
-  prove same-host UF2 hashes match; validate the resulting installer/display
+- [x] Rebuild the finalized native source twice at a clean canonical build path
+  and prove same-host UF2 hashes match; validate the resulting installer/display
   hashes, release archive, and clean-extraction dry run. Cross-host comparison
   exposed different newlib object ordering between Arm's macOS and Linux
   14.2.Rel1 distributions, so GitHub's pinned Linux x86_64 job is the declared

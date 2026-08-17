@@ -51,10 +51,12 @@ jobs:
       - run: sh deploy/setup-native-ci-linux.sh
       - name: Build native release products twice
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/build/release-native-1" sh deploy/build-native-apps.sh
+          native_build="$GITHUB_WORKSPACE/build/release-native"
+          BUILD_DIR="$native_build" sh deploy/build-native-apps.sh
           mkdir -p build/native-reference
           cp native/dist/*.elf native/dist/*.uf2 native/dist/SHA256SUMS build/native-reference/
-          BUILD_DIR="$GITHUB_WORKSPACE/build/release-native-2" sh deploy/build-native-apps.sh
+          rm -rf "$native_build"
+          BUILD_DIR="$native_build" sh deploy/build-native-apps.sh
           for artifact in WaveRider.uf2 waverider_display.elf waverider_installer.elf waverider_installer.uf2 SHA256SUMS; do
             cmp "build/native-reference/$artifact" "native/dist/$artifact"
           done
