@@ -11,7 +11,9 @@
 3. Run the Python tests on 3.11 and 3.13.
 4. Run `sh -n` against every shell script.
 5. Rebuild the native images with Pico SDK 2.3.0 and Arm GNU Toolchain
-   14.2.Rel1, then verify checksums and SRAM-only UF2 targets:
+   14.2.Rel1, then verify checksums and SRAM-only UF2 targets. The resulting
+   `native/dist/` directory is generated and ignored by Git; never stage UF2,
+   ELF, or checksum outputs in a source commit:
 
    ```text
    export PICO_SDK_PATH=/path/to/pico-sdk-2.3.0

@@ -19,8 +19,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OPENOCD = ROOT / "research/openocd-mac/openocd"
-DEFAULT_SCRIPTS = ROOT / "research/openocd-mac/scripts"
 DEFAULT_CONFIG = ROOT / "native/freewili2-openocd.cfg"
 DEFAULT_INSTALLER = (
     ROOT / "native/dist/waverider_installer.elf"
@@ -212,10 +210,7 @@ def resolve_openocd(requested: Path | None) -> tuple[Path, Path | None]:
 
     if requested is not None:
         executable = require_file(requested, "OpenOCD executable")
-        scripts = DEFAULT_SCRIPTS if executable.resolve() == DEFAULT_OPENOCD.resolve() else None
-        return executable, scripts
-    if DEFAULT_OPENOCD.is_file() and DEFAULT_SCRIPTS.is_dir():
-        return DEFAULT_OPENOCD, DEFAULT_SCRIPTS
+        return executable, None
     found = shutil.which("openocd")
     if found:
         return Path(found), None

@@ -8,8 +8,9 @@ __pycache__/
 /.vscode/
 /build/
 /dist/
+/native/dist/
 /device-backups/
+*.elf
+*.uf2
 *.tar.gz
 *.zip
-/research/*
-!/research/README.md

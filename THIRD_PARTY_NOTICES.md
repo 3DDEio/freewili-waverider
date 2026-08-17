@@ -44,16 +44,9 @@ licenses remain in force independently of WaveRider's GPL/CC licensing.
   `vendor/debian-source/rtl-sdr-2.0.2-2/`. Public releases preserve the package
   copyright files and identify the source version.
 
-## Optional Fox Hunt Badge test-beacon source
-
-- Upstream: <https://gitlab.com/bradanlane_cp/foxhunt>
-- License: GPL-3.0-or-later.
-- Use: pin mapping and SA868 control-flow provenance for the optional
-  `test-beacon/` development fixture. The fixture is not part of the WaveRider
-  receiver installation and retains explicit GPL attribution in its source.
-
 ## Generated and compiled files
 
-Prebuilt WaveRider UF2/ELF files correspond to the source in the tagged
-release. `native/dist/SHA256SUMS` records their checksums. Rebuilding requires
-the upstream dependencies described in [`research/README.md`](research/README.md).
+WaveRider UF2/ELF products are generated from tagged source by the pinned
+release workflow and are not committed to Git. Supported releases attach the
+validated UF2 files, checksum manifest, deterministic device bundle, complete
+source bundle, and provenance attestations.

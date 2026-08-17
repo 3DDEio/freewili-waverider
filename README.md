@@ -105,14 +105,6 @@ the [User guide](docs/USER_GUIDE.md) for normal operation, and the
 
 This software receives only. It does not turn the RTL-SDR into a transmitter.
 
-## Optional development test beacon
-
-[`test-beacon/`](test-beacon/README.md) contains the separately licensed,
-optional XIAO ESP32-C3 + NiceRF SA868 fixture used for controlled WaveRider
-field tests. It is not installed by WaveRider, is not required by end users,
-and does not change WaveRider's receive-only behavior. Its fail-safe updater
-stages and reads back the complete CircuitPython program before activation.
-
 ## Hardware
 
 - FreeWili 2 with the onboard CM0 and current CM0 Linux image.
@@ -122,15 +114,16 @@ stages and reads back the complete CircuitPython program before activation.
 - An antenna appropriate for the frequency being monitored. A directional
   antenna is required for meaningful bearing work.
 
-## Install current WaveRider from GitHub
+## Build and install the current source
 
 This installs the current release candidate without replacing the stock Main
 or Display firmware. The native app is stored on the Main SD card and appears
 as **Apps → Radio → WaveRider**.
 
-1. Install Python 3.11 or newer, clone the repository, and install the small
-   host-side installer dependency. Confirm `python3 --version` reports 3.11+
-   before creating the environment:
+1. This maintainer/developer path builds the native products instead of
+   downloading them. Install Python 3.11 or newer, clone recursively, install
+   the host-side dependency, and provide the pinned native toolchain described
+   below:
 
    ```text
    git clone --recurse-submodules https://github.com/3DDEio/freewili-waverider.git
@@ -140,6 +133,9 @@ as **Apps → Radio → WaveRider**.
    source .venv/bin/activate
    python -m pip install --upgrade pip
    python -m pip install '.[installer]'
+   export PICO_SDK_PATH=/path/to/pico-sdk-2.3.0
+   export PICO_TOOLCHAIN_PATH=/path/to/arm-gnu-toolchain-14.2.Rel1
+   sh deploy/build-native-apps.sh
    ```
 
    On Windows, use `python` in place of `python3` and activate the environment
@@ -196,8 +192,9 @@ the archive does not vendor Python itself, `pyserial`, or the RP2350-capable
 OpenOCD executable. The installer does not replace FreeWili firmware.
 
 1. Boot the CM0 in its normal maintenance/serial-console profile.
-2. Download and extract the [latest WaveRider release](https://github.com/3DDEio/freewili-waverider/releases/latest)
-   on Windows, macOS, or Linux.
+2. After the redistribution gate at the top of this README is cleared,
+   download and extract a supported WaveRider release on Windows, macOS, or
+   Linux. Do not treat the earlier beta archive as a supported installer.
 3. Before going offline, install the host-side serial dependency:
 
    ```text
@@ -245,15 +242,16 @@ confirmed.
 ## Repository layout
 
 - `src/` — CM0 Linux receiver, waterfall, Morse, settings, and bridge service.
-- `native/` — FreeWili Display app, self-installer, and pinned native artifacts.
-- `wilibsp/` — pinned official vendor BSP submodule; its reviewed WaveRider
+- `native/` — FreeWili Display app, self-installer, and build inputs. Generated
+  UF2/ELF products are deliberately ignored and published only as release assets.
+- `wilibsp/` — a small Git pointer to the pinned official vendor BSP source;
+  a recursive clone fetches it, and its reviewed WaveRider
   compatibility changes are explicit patches under `native/patches/`.
 - `deploy/` — release builder plus serial and on-device installation scripts.
 - `config/` — default field frequencies and service configuration.
 - `docs/` — user, deployment, architecture, validation, and limitation records.
-- `tools/` — device diagnostics, maintenance, and verification helpers; use
-  maintainer tools only through the procedure that documents their scope.
-- `test-beacon/` — optional, separately licensed controlled RF test fixture.
+- `tools/` — installation, dependency preparation, validation, and bounded
+  recovery helpers.
 - `tests/` — host-side behavior, safety, native design, and documentation tests.
 
 ## On-device controls
@@ -304,23 +302,6 @@ console; exact frequencies can be added and removed entirely on-device.
 Hold **Page** for five seconds from the running app to open the standard About
 screen. It shows the on-device application version and public source URL;
 release acceptance includes checking both values on the installed UF2.
-
-## Optional device maintenance: quiet and dark startup
-
-This is **not a WaveRider feature or installation step**. WaveRider, its
-installer, and its launcher never modify the stock Display firmware or change
-the device's startup lights or sounds. Most users should install WaveRider
-without applying this separate, device-specific maintenance patch.
-
-The stock LED animation and spoken **Free Wili** boot clip run before
-WaveRider, so the app itself cannot suppress them. FW2 v07 omits the relevant
-controls from its visible Settings list. The failed settings-file route is now
-blocked. A version-locked Display effect-point patch has been deployed to the
-connected FX0177 unit and independently read back; verified stock recovery is
-retained. The voice suppression is physically proven; V3 LED cold-boot
-acceptance is still pending. See
-[`docs/NIGHT_DEFAULTS.md`](docs/NIGHT_DEFAULTS.md) for the limitation, exact
-evidence, and rollback boundary.
 
 ## Return to maintenance mode
 
@@ -429,10 +410,6 @@ be pushed until every gate in
 [Deployment](docs/DEPLOYMENT.md), including vendor redistribution permission,
 is satisfied.
 
-The official WaveRider release archive deliberately omits the independent
-FX0177 quiet/dark stock-firmware patch. That modification is not installed,
-recommended, or implied by WaveRider.
-
 See the [User guide](docs/USER_GUIDE.md),
 [Known limitations](docs/LIMITATIONS.md),
 [Architecture](docs/ARCHITECTURE.md), [Deployment](docs/DEPLOYMENT.md),
@@ -447,9 +424,8 @@ WaveRider is developed in public at
 The `main` branch is protected: changes are expected to arrive through pull
 requests, pass Python 3.11/3.13 plus native source-to-UF2 CI, and receive owner
 review. See [Contributing](CONTRIBUTING.md)
-and the [Security policy](SECURITY.md). The repository's pre-public work is
-recorded honestly in [Project history](HISTORY.md); it is a reconstructed
-milestone record, not fabricated Git history.
+and the [Security policy](SECURITY.md). Generated firmware is reproducibly
+built by CI and is never accepted as a committed source file.
 
 ## Credits
 

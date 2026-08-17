@@ -135,29 +135,6 @@ last-row age, and command synchronization. A stale receiver replaces the
 waterfall with a plain-language attention page and flashes all seven top LEDs
 yellow.
 
-## FW2 v07 hides stock boot sound and light-show defaults
-
-The stock v07 firmware contains playback-volume, system-sound, and default
-light-show preferences, but Display Setup is not present in the on-device main
-menu. The FTDI endpoint is the FPGA high-speed interface, not a Display serial
-console.
-
-**User impact:** Turning the Light Show off inside its ordinary app is
-temporary, and the startup voice cannot be disabled from the visible Settings
-screens.
-
-**Current status:** The ordinary settings-file method has no effect on FW2
-v07. A backed-up debug-probe experiment wrote and remounted a `settings.txt` containing
-`sndvol=0`, `sndsys=0`, and `lshowdef=0`, but a full power cycle still produced
-the LED show and spoken boot clip. Runtime inspection then showed the effective
-`sndsys` value was still the compiled factory default (`1`). The helper now
-refuses the v07 write path. The legacy serial-menu method is for
-first-generation FreeWili hardware only. A separate, opt-in, version-locked
-Display effect-point patch is physically proven to suppress both effects on
-the connected FX0177 v07 unit, with stock recovery retained. It is not part of
-WaveRider installation and refuses any unverified stock firmware hash; see
-`docs/NIGHT_DEFAULTS.md`.
-
 ## Receiver USB and maintenance serial are mutually exclusive
 
 The tested CM0 exposes one USB controller. Receiver mode routes it to the

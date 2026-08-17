@@ -20,8 +20,6 @@ public beta.
 - [Architecture](ARCHITECTURE.md) — CM0, Main, Display, mailbox, and data-flow
   boundaries.
 - [One-tap launcher](LAUNCHER.md) — Apps → Radio → WaveRider startup contract.
-- [Quiet and dark startup](NIGHT_DEFAULTS.md) — optional device-specific stock
-  firmware maintenance; intentionally separate from WaveRider installation.
 
 ## Validation and project state
 
@@ -30,13 +28,10 @@ public beta.
 - [Backlog](BACKLOG.md) — shared implementation and release tracker.
 - [Haptic evidence](HAPTIC_EVIDENCE.md) — GPIO35 correction and physical pulse
   validation.
-- [History](../HISTORY.md) — reconstructed project milestones and public
-  history boundary.
 
 ## Device research and advanced reports
 
 - [FW2 v07 button bridge report](FW2_V07_BUTTON_BRIDGE_REPORT.md)
-- [FW2 v07 startup patch](FW2_V07_STARTUP_PATCH.md)
 - [Connected-device support report](SUPPORT_REPORT_FW2_FX0177.md)
 
 These diagnostic reports remain because they document device-specific
