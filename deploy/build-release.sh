@@ -38,7 +38,7 @@ done
 # .env, device capture, compiler output, or editor file from leaking into a
 # public archive merely because it sits below a copied directory.
 git -C "$ROOT" ls-files -z -- \
-    AGENTS.md CHANGELOG.md CONTRIBUTING.md COPYRIGHT HISTORY.md LICENSE \
+    AGENTS.md CHANGELOG.md CONTRIBUTING.md COPYRIGHT LICENSE \
     LICENSES LICENSES.md README.md SECURITY.md THIRD_PARTY_NOTICES.md \
     CMakeLists.txt .gitmodules pyproject.toml install.sh uninstall.sh \
     assets bin config deploy docs native src tools vendor >"$MANIFEST"
@@ -46,19 +46,20 @@ git -C "$ROOT" ls-files -z -- \
     cd "$ROOT"
     tar --null -T "$MANIFEST" -cf -
 ) | tar -xf - -C "$BUILD_DIR"
+# Native products are generated release inputs, not source-controlled files.
+# Add only the five fail-closed products verified above to the device bundle.
+mkdir -p "$BUILD_DIR/native/dist"
+cp \
+    "$ROOT/native/dist/waverider_display.elf" \
+    "$ROOT/native/dist/WaveRider.uf2" \
+    "$ROOT/native/dist/waverider_installer.elf" \
+    "$ROOT/native/dist/waverider_installer.uf2" \
+    "$ROOT/native/dist/SHA256SUMS" \
+    "$BUILD_DIR/native/dist/"
 # CI provisioning is maintainer/release infrastructure. It is intentionally
 # absent from the user-facing device-install bundle, which has no native-source
 # checkout or reason to download a compiler toolchain.
 rm -f "$BUILD_DIR/deploy/setup-native-ci-linux.sh"
-# The independently maintained FX0177 stock-firmware quiet/dark patch is kept
-# in the Git repository for its own users, but is intentionally not distributed
-# as part of the WaveRider application release. Installing WaveRider must never
-# imply or encourage replacing a user's stock Display firmware.
-rm -f \
-    "$BUILD_DIR/docs/FW2_V07_STARTUP_PATCH.md" \
-    "$BUILD_DIR/docs/NIGHT_DEFAULTS.md" \
-    "$BUILD_DIR/tools/fw2_patch_display_startup.py" \
-    "$BUILD_DIR/tools/fw2_set_night_defaults.py"
 find "$BUILD_DIR" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$BUILD_DIR" -type f -name '*.pyc' -delete
 rm -rf "$BUILD_DIR/src/freewili_foxhunt.egg-info"

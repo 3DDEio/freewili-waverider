@@ -5,7 +5,10 @@ its self-installer. The Display app owns the physical button loop and exchanges
 frequency commands plus live SDR rows with the CM0 service through Main's app
 signal mailbox.
 
-`dist/` contains the release artifacts:
+`dist/` is generated locally by `deploy/build-native-apps.sh` and is ignored by
+Git. Supported GitHub releases attach the validated UF2 files and checksums;
+the device-install bundle additionally contains the two ELF files needed by
+the probe-assisted installer. Generated products are:
 
 - `WaveRider.uf2` — the SRAM-only Apps-menu application. The friendly filename
   is intentional because current v07 menus display the UF2 stem.

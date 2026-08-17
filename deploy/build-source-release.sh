@@ -55,14 +55,6 @@ git -C "$ROOT/wilibsp" archive --format=tar HEAD | \
     tar -xf - -C "$STAGE/$PREFIX/wilibsp"
 git -C "$ROOT/wilibsp/libs/onewili" archive --format=tar HEAD | \
     tar -xf - -C "$STAGE/$PREFIX/wilibsp/libs/onewili"
-# Keep the unrelated, optional stock-firmware night-default modification out of
-# WaveRider's source release just as it is kept out of the install bundle.
-rm -f \
-    "$STAGE/$PREFIX/docs/FW2_V07_STARTUP_PATCH.md" \
-    "$STAGE/$PREFIX/docs/NIGHT_DEFAULTS.md" \
-    "$STAGE/$PREFIX/tools/fw2_patch_display_startup.py" \
-    "$STAGE/$PREFIX/tools/fw2_set_night_defaults.py"
-rm -rf "$STAGE/$PREFIX/test-beacon"
 (
     cd "$STAGE/$PREFIX"
     python3 tools/prepare_wilibsp.py \

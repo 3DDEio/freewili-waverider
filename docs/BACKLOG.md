@@ -4,6 +4,23 @@ The requirement-by-requirement connected-device exit gate is maintained in
 `docs/COMPLETION_AUDIT.md`. Host tests and injected input do not close physical
 hardware observations in that audit.
 
+## Distribution cleanup — 2026-08-17
+
+- [x] Remove committed UF2/ELF products. CI now creates two clean native builds,
+  compares every generated product byte-for-byte, validates the UF2 memory
+  targets, and packages only the verified outputs.
+- [x] Remove the unrelated stock-startup modification, external test-beacon
+  fixture, obsolete research placeholder, internal design notes, reconstructed
+  history file, and unreferenced bench-only utilities from the WaveRider repo.
+- [x] Keep `.gitmodules` plus the `wilibsp` Git pointer. The vendor source is
+  fetched only by a recursive clone and remains required for a reproducible
+  native build; no WiliBSP source tree is committed to the WaveRider repository.
+- [x] Fold the current checkout/setup-python/pytest dependency updates into the
+  distribution branch so the three standalone Dependabot PRs can be closed as
+  superseded after merge.
+- [ ] **STOP SHIP remains:** obtain explicit OneWili redistribution terms
+  before publishing a supported binary release.
+
 ## Release audit — 2026-08-12
 
 - [x] Pin the official WiliBSP external-app dependency and its nested OneWili
@@ -13,8 +30,9 @@ hardware observations in that audit.
   checksum validation, pinned GitHub Actions, and a protected-main release-tag
   gate.
 - [x] Make CI and the tag-release workflow provision checksum-pinned native
-  tools, rebuild both UF2 files from source, and byte-compare them with the
-  committed release candidates before publication.
+  tools, build the native products twice from source, and byte-compare those
+  clean outputs before publication. Generated UF2/ELF files are ignored rather
+  than committed.
 - [x] Generate signed GitHub/Sigstore provenance attestations for every
   downloadable archive, UF2, and native checksum manifest.
 - [x] Require `native-release` alongside Python 3.11 and 3.13 on protected
@@ -31,8 +49,6 @@ hardware observations in that audit.
   retain the prior app under `/appdata/waverider/`, restore on failure, and
   recover a verified backup or first-install staging file after power loss
   between renames.
-- [x] Keep the separate FX0177 quiet/dark stock-firmware patch out of the
-  WaveRider release archive.
 - [x] Make the public device-install archive deterministic and exclude local
   Python build metadata plus release-only compiler provisioning. The final
   builder copies only tracked, explicit allowlist paths and uses one portable
@@ -41,8 +57,7 @@ hardware observations in that audit.
 - [x] Add a deterministic complete-source release archive containing the exact
   pinned WiliBSP and nested OneWili contents; do not rely on GitHub's generated
   tag archive, which preserves only submodule gitlinks. It reads the pinned
-  vendor commits directly, never mutates either vendor working tree, and keeps
-  the separate stock-firmware and beacon work out of WaveRider distribution.
+  vendor commits directly and never mutates either vendor working tree.
 - [x] Exercise the release gates on GitHub-hosted Linux. The first public CI
   pass exposed macOS-only tar flags and one interrupted Picotool transfer; the
   builders are now portable, downloads resume/retry under publisher hashes,
@@ -131,8 +146,8 @@ Brand migration begins after the connected device demonstrates:
 - [x] Publish the project as
   [`3DDEio/freewili-waverider`](https://github.com/3DDEio/freewili-waverider).
   The first public Git history is an honest initial import; earlier milestones
-  are reconstructed in `HISTORY.md` rather than represented by fabricated
-  commits.
+  are represented by the public changelog and connected-device records rather
+  than fabricated commits.
 - Preserve `foxhuntctl`, `freewili-foxhunt.service`, installed list paths, and
   upgrade compatibility unless a migration provides explicit aliases and
   rollback coverage.
@@ -397,15 +412,6 @@ Brand migration begins after the connected device demonstrates:
 - Complete the final physical design-QA comparison against the original mockup
   after a fresh device photo; the 480 x 320 connected framebuffer comparison
   now passes palette and splash review.
-
-## Separate device-maintenance record — not WaveRider
-
-- [x] The independent, opt-in FW2 v07 quiet/dark startup modification is
-  physically proven after a complete power cycle: no stock LED animation, no
-  spoken **Free Wili** clip, and normal application operation. It is never
-  bundled with or invoked by WaveRider installation or launch. The hash-locked
-  V3 procedure and complete rollback boundary are maintained separately in
-  `docs/FW2_V07_STARTUP_PATCH.md`.
 
 ## Subsequent WaveRider features
 

@@ -1,6 +1,7 @@
-from pathlib import Path
+import hashlib
 import subprocess
 import tarfile
+from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
@@ -8,7 +9,6 @@ README = ROOT / "README.md"
 LIMITATIONS = ROOT / "docs" / "LIMITATIONS.md"
 USER_GUIDE = ROOT / "docs" / "USER_GUIDE.md"
 LICENSES = ROOT / "LICENSES.md"
-HISTORY = ROOT / "HISTORY.md"
 
 
 def test_readme_keeps_field_limits_visible_before_installation():
@@ -72,12 +72,6 @@ def test_public_repository_governance_files_are_present():
         assert path.is_file(), path
 
 
-def test_public_history_is_explicitly_reconstructed():
-    history = HISTORY.read_text().lower()
-    assert "reconstructed" in history
-    assert "not" in history and "commit history" in history
-
-
 def test_share_alike_licenses_are_visible():
     licenses = LICENSES.read_text()
     assert "GPL-3.0-or-later" in licenses
@@ -86,23 +80,23 @@ def test_share_alike_licenses_are_visible():
     assert (ROOT / "LICENSES" / "CC-BY-SA-4.0.txt").is_file()
 
 
-def test_native_release_artifacts_have_pinned_checksums():
-    sums = (ROOT / "native" / "dist" / "SHA256SUMS").read_text()
-    for artifact in (
-        "waverider_display.elf",
-        "WaveRider.uf2",
-        "waverider_installer.elf",
-        "waverider_installer.uf2",
-    ):
-        assert artifact in sums
-
-    display = (ROOT / "native" / "dist" / "WaveRider.uf2").read_bytes()
-    installer = (ROOT / "native" / "dist" / "waverider_installer.elf").read_bytes()
-    assert b"WaveRider" in display
-    assert b"3DDEio/freewili-waverider" in display
-    assert b"/apps/Radio/WaveRider.uf2" in installer
-    assert b"/apps/Radio/waverider_display.uf2" in installer
-    assert b"/apps/waverider/waverider_display.uf2" in installer
+def test_native_release_products_are_generated_and_ignored():
+    tracked = subprocess.run(
+        ["git", "ls-files", "native/dist"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    assert tracked == ""
+    ignored = subprocess.run(
+        ["git", "check-ignore", "native/dist/WaveRider.uf2"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    assert ignored.strip() == "native/dist/WaveRider.uf2"
 
 
 def test_quick_start_and_native_metadata_match_the_radio_menu_contract():
@@ -147,14 +141,15 @@ def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text()
 
     assert "github.com/freewili/wilibsp" in gitmodules
-    assert "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09" in release
-    assert "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1" in release
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in release
+    assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in release
     assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in release
     assert "native/dist/WaveRider.uf2" in release
     assert "native/dist/waverider_installer.uf2" in release
     assert "setup-native-ci-linux.sh" in release
-    assert "cmp build/committed-native/WaveRider.uf2" in release
-    assert "cmp build/committed-native/waverider_installer.uf2" in release
+    assert 'BUILD_DIR="$GITHUB_WORKSPACE/build/release-native-1"' in release
+    assert 'BUILD_DIR="$GITHUB_WORKSPACE/build/release-native-2"' in release
+    assert 'cmp "build/native-reference/$artifact" "native/dist/$artifact"' in release
     assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in release
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in ci
     assert "attestations: write" in release
@@ -200,22 +195,41 @@ def test_documentation_index_only_links_to_present_local_files():
     assert all(path.is_file() for path in linked)
 
 
-def test_public_release_archive_excludes_separate_stock_firmware_patch():
-    subprocess.run(["sh", "deploy/build-release.sh"], cwd=ROOT, check=True)
-    archive = ROOT / "dist" / "freewili-foxhunt-0.1.0.tar.gz"
-    with tarfile.open(archive, mode="r:gz") as bundle:
-        names = set(bundle.getnames())
-    prefix = "freewili-foxhunt-0.1.0/"
-    assert prefix + "tools/fw2_install_native_app.py" in names
-    assert prefix + "tools/prepare_wilibsp.py" in names
-    assert prefix + "vendor/debian-source/rtl-sdr-2.0.2-2/rtl-sdr_2.0.2-2.dsc" in names
-    assert prefix + "tools/fw2_patch_display_startup.py" not in names
-    assert prefix + "tools/fw2_set_night_defaults.py" not in names
-    assert prefix + "deploy/setup-native-ci-linux.sh" not in names
-    assert not any(".egg-info/" in name for name in names)
-    assert prefix + "docs/FW2_V07_STARTUP_PATCH.md" not in names
-    assert prefix + "docs/NIGHT_DEFAULTS.md" not in names
-    assert not any("test-beacon/" in name for name in names)
+def test_public_release_archive_contains_generated_products_without_repo_clutter():
+    native_dist = ROOT / "native" / "dist"
+    native_dist.mkdir(parents=True, exist_ok=True)
+    products = (
+        "waverider_display.elf",
+        "WaveRider.uf2",
+        "waverider_installer.elf",
+        "waverider_installer.uf2",
+    )
+    try:
+        sums = []
+        for name in products:
+            payload = f"generated test product: {name}\n".encode()
+            (native_dist / name).write_bytes(payload)
+            sums.append(f"{hashlib.sha256(payload).hexdigest()}  native/dist/{name}\n")
+        (native_dist / "SHA256SUMS").write_text("".join(sums))
+
+        subprocess.run(["sh", "deploy/build-release.sh"], cwd=ROOT, check=True)
+        archive = ROOT / "dist" / "freewili-foxhunt-0.1.0.tar.gz"
+        with tarfile.open(archive, mode="r:gz") as bundle:
+            names = set(bundle.getnames())
+        prefix = "freewili-foxhunt-0.1.0/"
+        assert prefix + "tools/fw2_install_native_app.py" in names
+        assert prefix + "tools/prepare_wilibsp.py" in names
+        assert prefix + "vendor/debian-source/rtl-sdr-2.0.2-2/rtl-sdr_2.0.2-2.dsc" in names
+        assert prefix + "native/dist/WaveRider.uf2" in names
+        assert prefix + "native/dist/waverider_installer.elf" in names
+        assert prefix + "deploy/setup-native-ci-linux.sh" not in names
+        assert prefix + "HISTORY.md" not in names
+        assert not any("research/" in name for name in names)
+        assert not any("test-beacon/" in name for name in names)
+        assert not any(".egg-info/" in name for name in names)
+    finally:
+        for name in (*products, "SHA256SUMS"):
+            (native_dist / name).unlink(missing_ok=True)
 
 
 def test_complete_source_archive_contains_pinned_submodule_contents():
@@ -245,8 +259,9 @@ def test_complete_source_archive_contains_pinned_submodule_contents():
     assert prefix + "wilibsp/bsp/CMakeLists.txt" in names
     assert prefix + "wilibsp/libs/onewili/include/onewili.h" in names
     assert prefix + ".waverider-native-source.json" in names
-    assert prefix + "tools/fw2_patch_display_startup.py" not in names
-    assert prefix + "tools/fw2_set_night_defaults.py" not in names
+    assert prefix + "HISTORY.md" not in names
+    assert not any("native/dist/" in name for name in names)
+    assert not any("research/" in name for name in names)
     assert not any("test-beacon/" in name for name in names)
     assert subprocess.run(
         ["git", "-C", "wilibsp", "status", "--porcelain"],

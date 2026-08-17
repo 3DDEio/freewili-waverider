@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from tools.fw2_install_native_app import (
-    ROOT,
     SRAM_START,
     SRAM_STOP,
     PSRAM_START,
@@ -12,6 +11,26 @@ from tools.fw2_install_native_app import (
     inspect_display_uf2,
     openocd_command,
 )
+
+
+def uf2(address=SRAM_START, payload=b"WaveRider"):
+    block = bytearray(512)
+    struct.pack_into(
+        "<8I",
+        block,
+        0,
+        0x0A324655,
+        0x9E5D5157,
+        0,
+        address,
+        len(payload),
+        0,
+        1,
+        0,
+    )
+    block[32 : 32 + len(payload)] = payload
+    struct.pack_into("<I", block, 508, 0x0AB16F30)
+    return bytes(block)
 
 
 def elf32(entry=SRAM_START + 0x178, vaddr=SRAM_START, memsz=0x2000):
@@ -85,14 +104,16 @@ def test_openocd_transaction_loads_and_verifies_without_programming(tmp_path):
     assert "flash write" not in joined
 
 
-def test_committed_native_release_artifacts_pass_fail_closed_gates():
-    assert inspect_display_uf2(ROOT / "native/dist/WaveRider.uf2") == "SRAM"
-    entry, segments = inspect_volatile_elf(
-        ROOT / "native/dist/waverider_installer.elf"
-    )
-    # Linker layout can legitimately move as the installer changes. The public
-    # safety contract is that execution begins at an aligned address in
-    # volatile SRAM, not at one historical byte offset.
-    assert SRAM_START <= entry < SRAM_STOP
-    assert entry % 2 == 0
-    assert segments
+def test_inspect_display_uf2_accepts_complete_sram_app(tmp_path):
+    image = tmp_path / "WaveRider.uf2"
+    image.write_bytes(uf2())
+
+    assert inspect_display_uf2(image) == "SRAM"
+
+
+def test_inspect_display_uf2_rejects_flash_payload(tmp_path):
+    image = tmp_path / "unsafe.uf2"
+    image.write_bytes(uf2(address=0x10000000))
+
+    with pytest.raises(ValueError, match="QSPI flash"):
+        inspect_display_uf2(image)

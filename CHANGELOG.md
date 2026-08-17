@@ -10,8 +10,6 @@ All notable public changes to WaveRider are recorded here. The format follows
 
 - Frequency-grouped, persistent CW message history with confirmation-gated
   Clear and larger word-wrapped decoded text.
-- Optional, separate CircuitPython SA868 development beacon fixture with a
-  byte-for-byte verified deployment path.
 - Git-clone installation quick start, repository map, and browsable
   documentation index.
 - A six-position Waterfall Span slider in Settings covering the documented
@@ -33,24 +31,20 @@ All notable public changes to WaveRider are recorded here. The format follows
 - The native application now identifies itself as **WaveRider** and installs at
   **Apps → Radio → WaveRider**. Upgrades verify the new copy before removing the
   former `/apps/waverider` entry.
-- Pytest collection is explicitly confined to WaveRider's tests instead of the
-  pinned vendor SDK research trees.
+- Pytest collection is explicitly confined to WaveRider's tests instead of
+  vendor SDK trees.
 - Boot-recovery verification now always detaches its routed shell, including
   when the initial terminal command fails, and compares installed hashes
   exactly rather than by substring.
-- Pocket Alert and the opt-in FX0177 v07 quiet/dark startup documentation now
-  match the physically verified hardware behavior.
 - Native app upgrades now use a byte-verified staging file, retain the previous
   UF2, restore it on failure, and recover safely after interruption between
   rename operations.
-- Public and CM0 install packages use explicit contents; the WaveRider archive
-  excludes the separate stock-firmware quiet/dark modification.
+- Public and CM0 install packages use explicit application-only contents.
 - Release automation pins Actions, accepts only version-matching tags already
   contained in protected `main`, validates SRAM-only UF2 files, and attaches
   both installable UF2 artifacts directly.
-- CI and tag publication now provision checksum-pinned native build tools,
-  rebuild both UF2s from the checked-out source, and require byte-for-byte
-  equality with the committed release artifacts.
+- CI and tag publication now provision checksum-pinned native build tools and
+  require two clean native builds to produce byte-for-byte identical results.
 - Public archives, UF2 files, and checksums receive GitHub/Sigstore build-
   provenance attestations tied to the protected tagged commit.
 - Device-install archives now use normalized timestamps and ownership, omit
@@ -82,8 +76,6 @@ All notable public changes to WaveRider are recorded here. The format follows
 
 - Larger CW efficacy sample and beacon-off false-positive control.
 - Optional narrow-FM speaker/headphone audio bridge.
-- Authoritative haptic-driver integration if FreeWili publishes the hardware
-  interface and the connected board is confirmed to contain a motor.
 
 ## [0.1.0-beta.1] - 2026-08-09
 
