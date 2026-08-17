@@ -147,8 +147,9 @@ def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     assert "native/dist/WaveRider.uf2" in release
     assert "native/dist/waverider_installer.uf2" in release
     assert "setup-native-ci-linux.sh" in release
-    assert 'BUILD_DIR="$GITHUB_WORKSPACE/build/release-native-1"' in release
-    assert 'BUILD_DIR="$GITHUB_WORKSPACE/build/release-native-2"' in release
+    assert 'native_build="$GITHUB_WORKSPACE/build/release-native"' in release
+    assert 'rm -rf "$native_build"' in release
+    assert release.count('BUILD_DIR="$native_build" sh deploy/build-native-apps.sh') == 2
     assert 'cmp "build/native-reference/$artifact" "native/dist/$artifact"' in release
     assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in release
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in ci
