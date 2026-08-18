@@ -12,6 +12,11 @@ All notable public changes to WaveRider are recorded here. The format follows
   FreeWili discovery, release checksum validation, direct Apps-SD installation,
   safe volatile debug-probe fallback, CM0 Linux preparation, receiver-service
   rollback, and live progress/error feedback.
+- Persistent rotating installer logs plus a privacy-safe **Save Diagnostics**
+  bundle for remote CM0 startup support. It records bounded startup/service,
+  USB, and sanitized runtime evidence without exporting decoded messages or
+  saved frequency lists, and always attempts to release an opened support
+  route while recording any detach failure.
 - Frequency-grouped, persistent CW message history with confirmation-gated
   Clear and larger word-wrapped decoded text.
 - Git-clone installation quick start, repository map, and browsable

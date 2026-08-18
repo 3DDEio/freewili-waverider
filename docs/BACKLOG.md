@@ -23,6 +23,16 @@ hardware observations in that audit.
   rollback, and host-mode activation behind one Install action. Prefer Main's
   supported SD handoff and fall back to the existing volatile SRAM installer
   when the host cannot mount that card.
+- [x] Add a rotating persistent installer timeline and a one-button,
+  privacy-safe support ZIP. It captures bounded CM0 startup stages, service and
+  bridge state, USB/boot-role facts, and sanitized runtime health while
+  omitting CW text, message history, and saved frequency lists. The collector
+  is read-only and always attempts to detach a successfully opened Main-to-CM0
+  shell route even when a query fails; any detach failure is captured in the
+  bundle rather than hidden.
+- [ ] Collect a support ZIP from the buddy's device while it is stuck on CM0
+  startup, identify the first failing milestone, and confirm the route returns
+  to normal app ownership after collection.
 - [ ] Run the combined installer from a clean supported release bundle against
   FX0177/v07 on macOS, then repeat on at least one Windows or Linux host. Prove
   direct-SD and debug-probe fallback behavior, automatic CM0 shell preparation,

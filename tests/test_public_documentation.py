@@ -144,6 +144,12 @@ def test_release_installation_leads_with_the_one_click_flow():
     assert "click **Install WaveRider** once" in readme
     assert "does not replace the stock Main or Display firmware" in installation
     assert "physical acceptance runs remain open" in installation
+    assert "Save Diagnostics" in readme
+    assert "Save Diagnostics" in installation
+    assert "decoded-message history" in installation
+    assert "Any detach failure" in installation
+    assert (ROOT / "installer" / "diagnostics.py").is_file()
+    assert (ROOT / "installer" / "collect_diagnostics.py").is_file()
 
 
 def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
@@ -234,6 +240,8 @@ def test_public_release_archive_contains_generated_products_without_repo_clutter
         assert prefix + "tools/fw2_install_native_app.py" in names
         assert prefix + "installer/waverider_installer.py" in names
         assert prefix + "installer/device_install.py" in names
+        assert prefix + "installer/diagnostics.py" in names
+        assert prefix + "installer/collect_diagnostics.py" in names
         assert prefix + "installer/Run WaveRider Installer.command" in names
         assert prefix + "installer/Run WaveRider Installer.cmd" in names
         assert prefix + "tools/prepare_wilibsp.py" in names

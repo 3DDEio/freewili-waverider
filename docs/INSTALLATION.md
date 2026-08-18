@@ -37,6 +37,39 @@ Return to the FreeWili home screen and open
 **Apps → Radio → WaveRider**. A healthy first launch shows startup progress and
 then `SDR LIVE` with a scrolling waterfall.
 
+## Save diagnostics for remote support
+
+If WaveRider remains on a CM0 startup or receiver-waiting screen, leave that
+screen visible and reconnect the FreeWili USB cable to the computer. Reopen the
+same WaveRider installer, select the detected FreeWili if one appears, and
+click **Save Diagnostics**. Choose a location for the generated
+`WaveRider-Support-*.zip`, then send that ZIP together with a photo of the exact
+on-device message.
+
+The bundle records:
+
+- the persistent installer timeline and release-integrity result;
+- the last reported WaveRider startup stage and sanitized receiver health;
+- bounded status for the CM0 bridge, WaveRider, and guard services;
+- bounded current-boot journal excerpts, CM0 boot-role facts, and USB discovery.
+
+It deliberately omits CW text, decoded-message history, saved frequency lists,
+and unrelated files from the computer user's home directory. Collection is
+read-only: it does not reboot the FreeWili, restart a service, install files,
+or change the receiver profile. It temporarily borrows the routed CM0 shell
+while the app is already stuck, restores terminal echo, and attempts to detach
+before it finishes. Any detach failure is placed in `warnings.txt` rather than
+hidden. Do not run it during an active field hunt.
+
+If the FreeWili Main port is not detected, **Save Diagnostics** still produces
+a local-only ZIP containing the installer timeline and the discovery failure.
+Advanced users can collect the same bundle without the GUI:
+
+```text
+python3 installer/collect_diagnostics.py --port /dev/cu.YOUR_MAIN_PORT \
+  --output WaveRider-Support.zip
+```
+
 ## Safety and fallback behavior
 
 The installer verifies the release checksum manifest and rejects a native app

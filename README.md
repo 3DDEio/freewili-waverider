@@ -213,6 +213,17 @@ connection. The installer never replaces stock Main or Display firmware.
    **Apps → Radio → WaveRider**. The serial port disappearing during the final
    activation is expected because CM0 has one USB controller.
 
+If a different device remains on a CM0 startup screen, reconnect its FreeWili
+USB cable, reopen the same installer, select the device if it appears, and click
+**Save Diagnostics**. The resulting ZIP contains the persistent installer
+timeline, CM0 startup stage, bounded service logs, USB discovery, and sanitized
+runtime health. It does not include decoded CW text, message history, saved
+frequency lists, or unrelated files from the user's home directory. The
+diagnostic pass does not reboot, restart, or install anything; it attempts to
+release its temporary CM0 support route before returning and records any
+detach failure in the bundle. See [Installation](docs/INSTALLATION.md) for the
+support workflow.
+
 The normal Apps-menu path uses Main's supported SD handoff. If that removable
 volume does not mount, the same button automatically tries the existing safe
 SRAM-only installer through the built-in debug probe. That fallback requires
