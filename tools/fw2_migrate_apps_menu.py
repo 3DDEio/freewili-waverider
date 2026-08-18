@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import sys
@@ -30,9 +31,16 @@ def migrate_volume(volume: Path, source: Path) -> dict[str, object]:
     radio.mkdir(parents=True, exist_ok=True)
 
     temporary = radio / (source.name + ".tmp")
-    shutil.copyfile(source, temporary)
-    with temporary.open("r+b") as copied:
-        os.fsync(copied.fileno())
+    expected_digest = hashlib.sha256(source.read_bytes()).digest()
+    try:
+        shutil.copyfile(source, temporary)
+        with temporary.open("r+b") as copied:
+            os.fsync(copied.fileno())
+        if hashlib.sha256(temporary.read_bytes()).digest() != expected_digest:
+            raise RuntimeError("copied WaveRider UF2 failed byte-for-byte verification")
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     os.replace(temporary, destination)
 
     old_radio = radio / OLD_RADIO_FILE

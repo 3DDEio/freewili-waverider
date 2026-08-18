@@ -11,6 +11,7 @@ import os
 import tarfile
 import time
 from pathlib import Path
+from typing import Callable
 
 import serial
 
@@ -30,6 +31,12 @@ CM0_FILES = (
     Path("vendor/debian-arm64/rtl-sdr_2.0.2-2+b1_arm64.deb"),
 )
 CM0_TREES = (Path("src/freewili_foxhunt"),)
+ProgressCallback = Callable[[int, str], None]
+
+
+def _progress(callback: ProgressCallback | None, percent: int, message: str) -> None:
+    if callback is not None:
+        callback(percent, message)
 
 
 def make_archive(root: Path) -> bytes:
@@ -102,6 +109,7 @@ def upload_archive(
     remote_archive: str,
     *,
     chunk_size: int = 384,
+    progress: Callable[[int, int], None] | None = None,
 ) -> None:
     """Upload without leaving the shell inside a multiline construct.
 
@@ -117,6 +125,8 @@ def upload_archive(
     for offset in range(0, len(encoded), chunk_size):
         chunk = encoded[offset : offset + chunk_size]
         command(port, f"printf %s '{chunk}' >> {staging}")
+        if progress is not None:
+            progress(min(offset + len(chunk), len(encoded)), len(encoded))
     command(port, f"base64 -d {staging} > {remote_archive} && rm -f {staging}")
 
 
@@ -146,25 +156,39 @@ def checked_command(port: serial.Serial, value: str, limit: float = 120.0) -> st
     return output.split(marker, 1)[0]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", required=True, help="CM0 console, such as /dev/cu.usbmodem1701 or COM7")
-    parser.add_argument("--activate", action="store_true", help="select USB-host mode and reboot after install")
-    args = parser.parse_args()
+def install_cm0(
+    root: Path,
+    port_name: str,
+    *,
+    activate: bool = False,
+    progress: ProgressCallback | None = None,
+) -> str:
+    """Install the CM0 runtime through an already-open Linux shell route."""
 
-    root = Path(__file__).resolve().parent.parent
+    _progress(progress, 0, "Building the verified CM0 payload")
     archive = make_archive(root)
     digest = hashlib.sha256(archive).hexdigest()
     remote_archive = "/tmp/freewili-foxhunt.tar.gz"
 
-    with serial.Serial(args.port, 115200, timeout=0.1) as port:
+    with serial.Serial(port_name, 115200, timeout=0.1) as port:
         # FreeWili Main reserves Ctrl-C for leaving its CM0 shell tunnel, so a
         # normal carriage return is the safe way to wake and confirm this prompt.
+        _progress(progress, 5, "Confirming the CM0 Linux shell")
         port.write(b"\r")
         read_until_quiet(port)
         command(port, "stty -echo")
-        upload_archive(port, archive, remote_archive)
+        upload_archive(
+            port,
+            archive,
+            remote_archive,
+            progress=lambda complete, total: _progress(
+                progress,
+                10 + int(55 * complete / max(total, 1)),
+                "Uploading the CM0 receiver package",
+            ),
+        )
         command(port, "stty echo")
+        _progress(progress, 68, "Verifying the CM0 upload")
         output = command(
             port,
             f"wc -c {remote_archive}; sha256sum {remote_archive}",
@@ -175,6 +199,7 @@ def main() -> int:
                 f"Expected SHA-256: {digest}\n"
                 f"Device reported:\n{output.strip()}"
             )
+        _progress(progress, 74, "Installing the receiver service with rollback protection")
         output = checked_command(
             port,
             "rm -rf /tmp/freewili-foxhunt-install && mkdir /tmp/freewili-foxhunt-install && "
@@ -182,10 +207,25 @@ def main() -> int:
             "sudo sh /tmp/freewili-foxhunt-install/freewili-foxhunt/install.sh",
             limit=180,
         )
-        print(output)
-        if args.activate:
-            print(command(port, "sudo foxhuntctl host --reboot", limit=10))
-            print("The CM0 is rebooting into RTL-SDR host mode; this serial port will disconnect.")
+        _progress(progress, 96, "CM0 receiver service installed")
+        if activate:
+            output += command(port, "sudo foxhuntctl host --reboot", limit=10)
+            output += "\nThe CM0 is rebooting into RTL-SDR host mode.\n"
+        _progress(progress, 100, "CM0 installation complete")
+    return output
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", required=True, help="CM0 console, such as /dev/cu.usbmodem1701 or COM7")
+    parser.add_argument("--activate", action="store_true", help="select USB-host mode and reboot after install")
+    args = parser.parse_args()
+
+    root = Path(__file__).resolve().parent.parent
+    output = install_cm0(root, args.port, activate=args.activate)
+    print(output)
+    if args.activate:
+        print("The CM0 is rebooting into RTL-SDR host mode; this serial port will disconnect.")
     return 0
 
 

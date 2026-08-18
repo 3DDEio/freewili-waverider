@@ -194,6 +194,19 @@ with the RTC probe, and use a physical Main reset if USB reappears silent.
 Escalate if the condition recurs, reporting both the failed state and the
 successful or failed recovery result.
 
+## One-click installer cannot mount the Apps SD
+
+Leave both SD cards installed, return the FreeWili to its home screen, and
+click Refresh in the installer. The installer always returns SD ownership to
+Main after a failed mount attempt. It then tries the physically established
+volatile installer path when Raspberry Pi's RP2350-capable OpenOCD and the
+built-in debug probe are available.
+
+If the fallback reports that OpenOCD is missing, install the Raspberry Pi
+RP2350-capable OpenOCD bundle and restart the WaveRider installer. Do not put
+the Display processor into BOOTSEL and do not flash a stock firmware image.
+The installer stops before any stock-firmware write.
+
 The Main SD observed with v07 contained `FW2Main.uf2` and `FW2Display.uf2` in
 `/firmware`; its `/fpga` directory was empty. Because the router worked after a
 Main reset without adding a file, the empty directory is not evidence of a

@@ -15,6 +15,19 @@ hardware observations in that audit.
 - [x] Keep `.gitmodules` plus the `wilibsp` Git pointer. The vendor source is
   fetched only by a recursive clone and remains required for a reproducible
   native build; no WiliBSP source tree is committed to the WaveRider repository.
+- [x] Stop copying WiliBSP and OneWili into the deterministic project-source
+  archive. Ship the reviewed URLs/commit pins and a fetch helper instead, so
+  users retrieve those trees directly from FreeWili when they build locally.
+- [x] Add an Akhlut-inspired cross-platform installer UI that combines artifact
+  verification, Apps-menu deployment, CM0 Linux preparation, receiver install,
+  rollback, and host-mode activation behind one Install action. Prefer Main's
+  supported SD handoff and fall back to the existing volatile SRAM installer
+  when the host cannot mount that card.
+- [ ] Run the combined installer from a clean supported release bundle against
+  FX0177/v07 on macOS, then repeat on at least one Windows or Linux host. Prove
+  direct-SD and debug-probe fallback behavior, automatic CM0 shell preparation,
+  guarded activation, Apps → Radio → WaveRider launch, and failure recovery
+  before labeling the flow physically supported.
 - [x] Fold the current checkout/setup-python/pytest dependency updates into the
   distribution branch so the three standalone Dependabot PRs can be closed as
   superseded after merge.
@@ -54,10 +67,10 @@ hardware observations in that audit.
   builder copies only tracked, explicit allowlist paths and uses one portable
   Python tar writer on macOS and Linux, so ignored local files cannot leak into
   a public bundle and GNU/BSD tar flag differences cannot create empty output.
-- [x] Add a deterministic complete-source release archive containing the exact
-  pinned WiliBSP and nested OneWili contents; do not rely on GitHub's generated
-  tag archive, which preserves only submodule gitlinks. It reads the pinned
-  vendor commits directly and never mutates either vendor working tree.
+- [x] Add a deterministic WaveRider project-source archive. It excludes vendor
+  trees, retains the exact reviewed commit pins and compatibility patches, and
+  provides `tools/fetch_native_dependencies.py` to download those commits
+  directly from FreeWili for a local rebuild.
 - [x] Exercise the release gates on GitHub-hosted Linux. The first public CI
   pass exposed macOS-only tar flags and one interrupted Picotool transfer; the
   builders are now portable, downloads resume/retry under publisher hashes,

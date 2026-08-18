@@ -13,6 +13,9 @@ licenses remain in force independently of WaveRider's GPL/CC licensing.
   [`TUSB-XINPUT-MIT.txt`](LICENSES/TUSB-XINPUT-MIT.txt),
   [`FATFS.txt`](LICENSES/FATFS.txt), and
   [`SEGGER-RTT.txt`](LICENSES/SEGGER-RTT.txt).
+- The one-click installer's Main-SD handoff is adapted from WiliBSP's
+  MIT-licensed `tools/fw.py`; the required MIT notice is preserved above and
+  in `LICENSES/WILIBSP-MIT.txt`.
 
 ## FreeWili OneWili
 
@@ -48,5 +51,7 @@ licenses remain in force independently of WaveRider's GPL/CC licensing.
 
 WaveRider UF2/ELF products are generated from tagged source by the pinned
 release workflow and are not committed to Git. Supported releases attach the
-validated UF2 files, checksum manifest, deterministic device bundle, complete
-source bundle, and provenance attestations.
+validated UF2 files, checksum manifest, deterministic device bundle,
+WaveRider project-source bundle, and provenance attestations. The
+project-source bundle records and fetches vendor commits; it does not copy
+WiliBSP or OneWili trees.

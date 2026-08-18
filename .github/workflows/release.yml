@@ -37,6 +37,12 @@ jobs:
             echo "Release commit $GITHUB_SHA is not contained in origin/main" >&2
             exit 1
           }
+      - name: Enforce OneWili redistribution gate
+        run: |
+          test -s LICENSES/ONEWILI-REDISTRIBUTION.txt || {
+            echo "Supported binary publication is blocked: add the documented OneWili license or written redistribution grant." >&2
+            exit 1
+          }
       - run: python -m pytest -q tests
       - run: python wilibsp/tools/check_app_repo.py .
       - run: python tools/prepare_wilibsp.py

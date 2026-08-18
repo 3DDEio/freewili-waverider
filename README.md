@@ -9,10 +9,11 @@ RTL2832U/R820T USB receiver into a receive-only 2 m / 70 cm field instrument.
 
 https://hackerwarehouse.com/product/rtlsdr/
 
-WaveRider is a supported release candidate for FreeWili 2. Read the limitations
-below before relying on it in a field event. Publication remains blocked until
-FreeWili explicitly licenses the linked OneWili dependency for redistribution;
-see [Third-party notices](THIRD_PARTY_NOTICES.md).
+WaveRider is a source-available release candidate for FreeWili 2. Read the
+limitations below before relying on it in a field event. Supported binary
+publication remains blocked until FreeWili explicitly licenses the linked
+OneWili dependency for redistribution; see
+[Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Important current limitations
 
@@ -186,58 +187,49 @@ Do not rewrite Display firmware to uninstall WaveRider.
 
 ## Install from a release
 
-The downloaded bundle contains every package sent to the CM0, so that device
-installation can run without an Internet connection. Prepare the host first:
-the archive does not vendor Python itself, `pyserial`, or the RP2350-capable
-OpenOCD executable. The installer does not replace FreeWili firmware.
+The downloaded bundle contains every package sent to CM0. The first launcher
+run needs Internet access only when its small Python device-discovery
+environment is not already present; the FreeWili itself does not need a network
+connection. The installer never replaces stock Main or Display firmware.
 
-1. Boot the CM0 in its normal maintenance/serial-console profile.
-2. After the redistribution gate at the top of this README is cleared,
+1. After the redistribution gate at the top of this README is cleared,
    download and extract a supported WaveRider release on Windows, macOS, or
-   Linux. Do not treat the earlier beta archive as a supported installer.
-3. Before going offline, install the host-side serial dependency:
+   Linux. Keep both FreeWili SD cards installed, connect its USB cable, and
+   leave the device at the home screen.
+2. Start the included installer:
 
-   ```text
-   python3 -m pip install 'pyserial>=3.5,<4'
-   ```
+   - macOS: double-click **installer/Run WaveRider Installer.command**
+   - Windows: double-click **installer/Run WaveRider Installer.cmd**
+   - Linux: run **installer/run-waverider-installer.sh**
 
-4. Install the native WaveRider Apps-menu application with the built-in
-   CMSIS-DAP probe connected. [Raspberry Pi's RP2350-capable OpenOCD](https://github.com/raspberrypi/pico-sdk-tools/releases)
-   must be on
-   `PATH`, or supplied with `--openocd` and `--scripts`:
+   The launcher creates an isolated local environment and installs the pinned
+   `pyserial`/`pyfwfinder` host dependencies when needed. Nothing is installed
+   globally.
+3. Select the detected FreeWili 2 and click **Install WaveRider** once. The
+   installer verifies release checksums, installs **Apps → Radio → WaveRider**,
+   starts CM0 Linux, transfers the checksum-verified receiver service with
+   rollback protection, and selects guarded SDR host mode.
+4. When the installer reports success, open
+   **Apps → Radio → WaveRider**. The serial port disappearing during the final
+   activation is expected because CM0 has one USB controller.
 
-   ```text
-   python3 tools/fw2_install_native_app.py --dry-run
-   python3 tools/fw2_install_native_app.py
-   ```
-
-   Wait for **INSTALL COMPLETE**, then hold Home for five seconds. The loader
-   runs only from volatile SRAM/PSRAM, fail-closes on any QSPI target, and
-   installs the friendly entry at **Apps → Radio → WaveRider**.
-
-5. Identify the CM0 console port:
-
-   - macOS: usually `/dev/cu.usbmodem1701`
-   - Linux: usually `/dev/ttyACM0`
-   - Windows: a COM port such as `COM7`
-
-6. Install and reboot into receiver mode:
-
-   ```text
-   python3 deploy/serial_install.py --port /dev/cu.usbmodem1701 --activate
-   ```
-
-The serial port disappearing is expected: the CM0 has one USB controller and
-receiver mode routes it to the Linux USB Host socket. The first receiver boot is
-guarded for two minutes. If the SDR and on-device display do not both become
-live, the installer restores maintenance mode and the serial console returns.
+The normal Apps-menu path uses Main's supported SD handoff. If that removable
+volume does not mount, the same button automatically tries the existing safe
+SRAM-only installer through the built-in debug probe. That fallback requires
+[Raspberry Pi's RP2350-capable OpenOCD](https://github.com/raspberrypi/pico-sdk-tools/releases)
+on the host. Both paths reject QSPI-targeted app images before writing. The
+combined automatic flow is covered by host tests; a clean-device physical
+acceptance run remains required before the first supported release.
 
 Each supported release also attaches a separate
-`freewili-waverider-source-<version>.tar.gz`. Unlike GitHub's automatically
-generated tag archive, it contains the exact pinned WiliBSP and nested OneWili
-source needed for an offline native rebuild. This complete-source artifact is
-published only after every bundled dependency's redistribution terms are
-confirmed.
+`freewili-waverider-source-<version>.tar.gz`. It contains WaveRider's project
+source, patches, dependency URLs, and reviewed commit pins—but deliberately
+does not copy WiliBSP or OneWili source. Run
+`python3 tools/fetch_native_dependencies.py` in an extracted project-source
+archive to fetch those exact commits directly from FreeWili before a native
+build. The generated binary remains subject to every upstream dependency's
+license; fetching instead of copying source does not clear the current
+OneWili binary-release gate.
 
 ## Repository layout
 
@@ -248,6 +240,8 @@ confirmed.
   a recursive clone fetches it, and its reviewed WaveRider
   compatibility changes are explicit patches under `native/patches/`.
 - `deploy/` — release builder plus serial and on-device installation scripts.
+- `installer/` — cross-platform one-click GUI, launchers, and the narrow
+  MIT-attributed Main-SD handoff used by release installs.
 - `config/` — default field frequencies and service configuration.
 - `docs/` — user, deployment, architecture, validation, and limitation records.
 - `tools/` — installation, dependency preparation, validation, and bounded
@@ -405,8 +399,9 @@ GitHub Actions verifies Python 3.11 and 3.13 on every push. A matching `v0.1.0`
 tag publishes only when its commit is already contained in protected `main`.
 The release attaches the device-install bundle, checksums, and both validated
 UF2 files directly. Rebuilds use a recursive clone of the matching Git tag;
-the install bundle is not a standalone native-source checkout. Tags must not
-be pushed until every gate in
+the WaveRider project-source archive fetches pinned vendor dependencies from
+their upstream repositories rather than redistributing their trees. Tags must
+not be pushed until every gate in
 [Deployment](docs/DEPLOYMENT.md), including vendor redistribution permission,
 is satisfied.
 

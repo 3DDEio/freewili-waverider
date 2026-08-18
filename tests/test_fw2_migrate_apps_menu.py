@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from tools import fw2_migrate_apps_menu
 from tools.fw2_migrate_apps_menu import migrate_volume
 
 
@@ -48,3 +49,19 @@ def test_migration_requires_an_apps_volume(tmp_path):
 
     with pytest.raises(RuntimeError, match="no apps directory"):
         migrate_volume(tmp_path / "not-main-sd", source)
+
+
+def test_migration_rejects_and_removes_a_corrupted_staging_copy(monkeypatch, tmp_path):
+    volume, source = make_volume(tmp_path)
+
+    def corrupt_copy(_source, destination):
+        Path(destination).write_bytes(b"corrupt")
+
+    monkeypatch.setattr(fw2_migrate_apps_menu.shutil, "copyfile", corrupt_copy)
+
+    with pytest.raises(RuntimeError, match="byte-for-byte"):
+        migrate_volume(volume, source)
+
+    radio = volume / "apps" / "Radio"
+    assert not (radio / "WaveRider.uf2").exists()
+    assert not (radio / "WaveRider.uf2.tmp").exists()

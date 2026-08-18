@@ -8,6 +8,10 @@ All notable public changes to WaveRider are recorded here. The format follows
 
 ### Added
 
+- A cross-platform WaveRider installer with one Install action, automatic
+  FreeWili discovery, release checksum validation, direct Apps-SD installation,
+  safe volatile debug-probe fallback, CM0 Linux preparation, receiver-service
+  rollback, and live progress/error feedback.
 - Frequency-grouped, persistent CW message history with confirmation-gated
   Clear and larger word-wrapped decoded text.
 - Git-clone installation quick start, repository map, and browsable
@@ -50,9 +54,9 @@ All notable public changes to WaveRider are recorded here. The format follows
 - Device-install archives now use normalized timestamps and ownership, omit
   locally generated Python metadata, and reproduce byte-for-byte from the same
   release inputs.
-- Releases now attach a deterministic complete-source archive containing the
-  pinned WiliBSP and nested OneWili trees instead of relying on GitHub's
-  submodule-incomplete generated source download.
+- The deterministic project-source archive no longer copies WiliBSP or
+  OneWili. It records the reviewed dependency commits and includes a helper
+  that fetches those exact trees directly from FreeWili for local builds.
 - CM0 upgrades now verify the exact bundled RTL-SDR packages, compile a staged
   runtime, promote the complete tree atomically, and retain one predecessor.
 - CM0 integration upgrades now restore the preceding runtime, command wrappers,

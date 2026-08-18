@@ -134,6 +134,18 @@ def test_quick_start_and_native_metadata_match_the_radio_menu_contract():
     )
 
 
+def test_release_installation_leads_with_the_one_click_flow():
+    readme = README.read_text()
+    installation = (ROOT / "docs" / "INSTALLATION.md").read_text()
+
+    assert "installer/Run WaveRider Installer.command" in readme
+    assert "installer/Run WaveRider Installer.cmd" in readme
+    assert "installer/run-waverider-installer.sh" in readme
+    assert "click **Install WaveRider** once" in readme
+    assert "does not replace the stock Main or Display firmware" in installation
+    assert "physical acceptance runs remain open" in installation
+
+
 def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     gitmodules = (ROOT / ".gitmodules").read_text()
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
@@ -144,6 +156,7 @@ def test_vendor_source_and_release_workflow_are_pinned_and_fail_closed():
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in release
     assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in release
     assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in release
+    assert "LICENSES/ONEWILI-REDISTRIBUTION.txt" in release
     assert "native/dist/WaveRider.uf2" in release
     assert "native/dist/waverider_installer.uf2" in release
     assert "setup-native-ci-linux.sh" in release
@@ -219,6 +232,10 @@ def test_public_release_archive_contains_generated_products_without_repo_clutter
             names = set(bundle.getnames())
         prefix = "freewili-foxhunt-0.1.0/"
         assert prefix + "tools/fw2_install_native_app.py" in names
+        assert prefix + "installer/waverider_installer.py" in names
+        assert prefix + "installer/device_install.py" in names
+        assert prefix + "installer/Run WaveRider Installer.command" in names
+        assert prefix + "installer/Run WaveRider Installer.cmd" in names
         assert prefix + "tools/prepare_wilibsp.py" in names
         assert prefix + "vendor/debian-source/rtl-sdr-2.0.2-2/rtl-sdr_2.0.2-2.dsc" in names
         assert prefix + "native/dist/WaveRider.uf2" in names
@@ -233,7 +250,7 @@ def test_public_release_archive_contains_generated_products_without_repo_clutter
             (native_dist / name).unlink(missing_ok=True)
 
 
-def test_complete_source_archive_contains_pinned_submodule_contents():
+def test_project_source_archive_fetches_pinned_vendor_source_instead_of_copying_it():
     before_wilibsp = subprocess.run(
         ["git", "-C", "wilibsp", "status", "--porcelain"],
         cwd=ROOT,
@@ -256,10 +273,11 @@ def test_complete_source_archive_contains_pinned_submodule_contents():
     assert prefix + "CMakeLists.txt" in names
     assert prefix + "tools/prepare_wilibsp.py" in names
     assert prefix + "native/patches/wilibsp-waverider.patch" in names
-    assert prefix + "wilibsp/LICENSE" in names
-    assert prefix + "wilibsp/bsp/CMakeLists.txt" in names
-    assert prefix + "wilibsp/libs/onewili/include/onewili.h" in names
-    assert prefix + ".waverider-native-source.json" in names
+    assert prefix + "tools/fetch_native_dependencies.py" in names
+    assert prefix + "wilibsp/LICENSE" not in names
+    assert prefix + "wilibsp/bsp/CMakeLists.txt" not in names
+    assert prefix + "wilibsp/libs/onewili/include/onewili.h" not in names
+    assert prefix + ".waverider-native-source.json" not in names
     assert prefix + "HISTORY.md" not in names
     assert not any("native/dist/" in name for name in names)
     assert not any("research/" in name for name in names)
