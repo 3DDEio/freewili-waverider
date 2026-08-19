@@ -21,6 +21,21 @@ this ordering correctly.
 
 ## Stuck on `Waiting for SDR Data` with flashing yellow LEDs
 
+For a remote-support case, first use the release installer's **Save
+Diagnostics** action while this screen is still visible. Send the generated ZIP
+and a photo of the exact message to the maintainer. The bundle distinguishes
+configuration loading, receiver start, Display connection, and first-SDR-row
+waits; it also captures bounded CM0 bridge/service state without copying saved
+frequencies or decoded messages. A missing Main port still yields a useful
+local installer/discovery timeline. See
+[Save diagnostics for remote support](INSTALLATION.md#save-diagnostics-for-remote-support).
+
+Inspect `host-serial-ports.json` and `main-route-probe.txt` before treating the
+CM0 as failed. A selected port not listed under `freewili_main_candidates` is a
+host port-selection problem. `main-parser-silent` on a correctly identified Main
+port means Main's command parser is unavailable; `main-parser-responsive`
+followed by a shell-open failure narrows the fault to Main's routed CM0 path.
+
 First allow the normal CM0/tuner startup window. WaveRider now waits 20 seconds
 before attempting any recovery. On FW2 v07, Main can occasionally retain its
 routed Linux `TYPE_SHELL` session during a fresh launch. In that state the SDR
@@ -46,7 +61,9 @@ On the tested FX0177 v07 unit, Main USB mailbox reads competed with the CM0
 service's own response stream and were followed by repeated native Display
 publication timeouts. The SDR process can remain healthy while the visible row
 sequence stalls. Leave Main USB idle during an RF/CW field test; pause
-WaveRider before attaching maintenance diagnostics.
+WaveRider before attaching maintenance diagnostics. The installer's bounded
+**Save Diagnostics** action is the exception intended for an already-stuck
+startup screen; it explicitly releases its temporary route when done.
 
 ## Stale or duplicated foxhunt panels
 
@@ -193,6 +210,19 @@ Do not reflash firmware for this symptom. Try one Main recovery reset, prove it
 with the RTC probe, and use a physical Main reset if USB reappears silent.
 Escalate if the condition recurs, reporting both the failed state and the
 successful or failed recovery result.
+
+## One-click installer cannot mount the Apps SD
+
+Leave both SD cards installed, return the FreeWili to its home screen, and
+click Refresh in the installer. The installer always returns SD ownership to
+Main after a failed mount attempt. It then tries the physically established
+volatile installer path when Raspberry Pi's RP2350-capable OpenOCD and the
+built-in debug probe are available.
+
+If the fallback reports that OpenOCD is missing, install the Raspberry Pi
+RP2350-capable OpenOCD bundle and restart the WaveRider installer. Do not put
+the Display processor into BOOTSEL and do not flash a stock firmware image.
+The installer stops before any stock-firmware write.
 
 The Main SD observed with v07 contained `FW2Main.uf2` and `FW2Display.uf2` in
 `/firmware`; its `/fpga` directory was empty. Because the router worked after a

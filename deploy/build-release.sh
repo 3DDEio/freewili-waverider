@@ -41,7 +41,7 @@ git -C "$ROOT" ls-files -z -- \
     AGENTS.md CHANGELOG.md CONTRIBUTING.md COPYRIGHT LICENSE \
     LICENSES LICENSES.md README.md SECURITY.md THIRD_PARTY_NOTICES.md \
     CMakeLists.txt .gitmodules pyproject.toml install.sh uninstall.sh \
-    assets bin config deploy docs native src tools vendor >"$MANIFEST"
+    assets bin config deploy docs installer native src tools vendor >"$MANIFEST"
 (
     cd "$ROOT"
     tar --null -T "$MANIFEST" -cf -

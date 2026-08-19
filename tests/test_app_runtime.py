@@ -103,6 +103,44 @@ def test_sdr_capture_starts_before_display_handshake(tmp_path):
     assert events[:2] == ["sdr", "display"]
 
 
+def test_runtime_publishes_distinct_startup_milestones(tmp_path):
+    class RecordingStatus:
+        def __init__(self):
+            self.items = []
+
+        def write(self, **values):
+            self.items.append(values)
+
+    frequencies = FrequencyList(
+        "Field", [FrequencyEntry(147_495_000, "Primary")]
+    )
+    row = SpectrumRow(
+        low_hz=147_494_000,
+        high_hz=147_496_000,
+        bin_hz=1_000,
+        samples=2_048,
+        powers_dbfs=[-60.0, -30.0, -45.0],
+    )
+    app = FoxhuntApp(
+        frequencies,
+        tmp_path / "status.json",
+        ListStore(tmp_path / "lists"),
+        once=True,
+        display=RuntimeDisplay(),
+        sdr=RuntimeSdr(row),
+    )
+    status = RecordingStatus()
+    app.status = status
+
+    assert app.run() == 0
+    assert [item["startup_stage"] for item in status.items] == [
+        "receiver",
+        "display",
+        "first_row",
+        "live",
+    ]
+
+
 def test_confirmed_message_clear_removes_candidates_and_runtime_summary(tmp_path):
     frequencies = FrequencyList(
         "Field", [FrequencyEntry(147_500_000, "Primary")]
@@ -175,6 +213,7 @@ def test_green_press_retunes_before_next_waterfall_and_status_snapshot(tmp_path)
     assert display.receiver_frequency == 146_520_000
     assert len(display.rows) == 1
     assert status["state"] == "live"
+    assert status["startup_stage"] == "live"
     assert status["selected"] == 1
     assert status["frequency_hz"] == 146_520_000
     assert status["waterfall_bins"] == 12

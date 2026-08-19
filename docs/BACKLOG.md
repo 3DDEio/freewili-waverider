@@ -15,6 +15,39 @@ hardware observations in that audit.
 - [x] Keep `.gitmodules` plus the `wilibsp` Git pointer. The vendor source is
   fetched only by a recursive clone and remains required for a reproducible
   native build; no WiliBSP source tree is committed to the WaveRider repository.
+- [x] Stop copying WiliBSP and OneWili into the deterministic project-source
+  archive. Ship the reviewed URLs/commit pins and a fetch helper instead, so
+  users retrieve those trees directly from FreeWili when they build locally.
+- [x] Add an Akhlut-inspired cross-platform installer UI that combines artifact
+  verification, Apps-menu deployment, CM0 Linux preparation, receiver install,
+  rollback, and host-mode activation behind one Install action. Prefer Main's
+  supported SD handoff and fall back to the existing volatile SRAM installer
+  when the host cannot mount that card.
+- [x] Add a rotating persistent installer timeline and a one-button,
+  privacy-safe support ZIP. It captures bounded CM0 startup stages, service and
+  bridge state, USB/boot-role facts, and sanitized runtime health while
+  omitting CW text, message history, and saved frequency lists. The collector
+  is read-only and always attempts to detach a successfully opened Main-to-CM0
+  shell route even when a query fails; any detach failure is captured in the
+  bundle rather than hidden.
+- [ ] Collect a support ZIP from the buddy's device while it is stuck on CM0
+  startup, identify the first failing milestone, and confirm the route returns
+  to normal app ownership after collection.
+  The first Windows 11 bundle verified the release manifest and selected
+  `COM11`, then failed before CM0 access with **Main did not open a correlated
+  CM0 shell**. It could not distinguish a manually selected wrong COM port from
+  a silent/occupied Main parser because the CLI reused a stale 36-minute-old
+  session log and the pre-shell failure discarded partial evidence. The
+  collector now creates a fresh current-attempt log, copies it only after the
+  collection completes, inventories host serial ports, records fwFinder's Main
+  classification, performs a harmless read-only Main probe, and preserves that
+  preflight even when the CM0 shell never opens. Obtain one second bundle with
+  this hardened schema to close the classification step.
+- [ ] Run the combined installer from a clean supported release bundle against
+  FX0177/v07 on macOS, then repeat on at least one Windows or Linux host. Prove
+  direct-SD and debug-probe fallback behavior, automatic CM0 shell preparation,
+  guarded activation, Apps → Radio → WaveRider launch, and failure recovery
+  before labeling the flow physically supported.
 - [x] Fold the current checkout/setup-python/pytest dependency updates into the
   distribution branch so the three standalone Dependabot PRs can be closed as
   superseded after merge.
@@ -54,10 +87,10 @@ hardware observations in that audit.
   builder copies only tracked, explicit allowlist paths and uses one portable
   Python tar writer on macOS and Linux, so ignored local files cannot leak into
   a public bundle and GNU/BSD tar flag differences cannot create empty output.
-- [x] Add a deterministic complete-source release archive containing the exact
-  pinned WiliBSP and nested OneWili contents; do not rely on GitHub's generated
-  tag archive, which preserves only submodule gitlinks. It reads the pinned
-  vendor commits directly and never mutates either vendor working tree.
+- [x] Add a deterministic WaveRider project-source archive. It excludes vendor
+  trees, retains the exact reviewed commit pins and compatibility patches, and
+  provides `tools/fetch_native_dependencies.py` to download those commits
+  directly from FreeWili for a local rebuild.
 - [x] Exercise the release gates on GitHub-hosted Linux. The first public CI
   pass exposed macOS-only tar flags and one interrupted Picotool transfer; the
   builders are now portable, downloads resume/retry under publisher hashes,

@@ -4,7 +4,9 @@
 
 1. Confirm FreeWili has explicitly licensed or granted redistribution
    permission for the pinned OneWili source. A public checkout without a
-   license file is not permission; this is a stop-ship gate.
+   license file is not permission; this is a stop-ship gate. Preserve the
+   reviewed terms as `LICENSES/ONEWILI-REDISTRIBUTION.txt`; the tag workflow
+   fails closed while that file is absent.
 2. Clone with `--recurse-submodules`; run `python3 tools/prepare_wilibsp.py`
    and `python3 wilibsp/tools/check_app_repo.py .`. Both pinned commits must
    match before reviewed patches are applied.
@@ -33,12 +35,16 @@
    matching macOS 14.2.Rel1 distribution orders some newlib objects
    differently, so a Mac rebuild is safety-equivalent but not byte-identical.
 
-6. Build the device archive with `sh deploy/build-release.sh` and the complete
-   source archive with `sh deploy/build-source-release.sh`; verify both
-   checksums plus the Debian corresponding-source checksums.
-7. Extract the archive into a clean directory. Run the native installer's
-   `--dry-run`, inspect the strict CM0 serial manifest, and confirm no local
-   toolchain, secret, backup, or hardware dump entered the bundle.
+6. Build the device archive with `sh deploy/build-release.sh` and the WaveRider
+   project-source archive with `sh deploy/build-source-release.sh`; verify both
+   checksums plus the Debian corresponding-source checksums. Confirm the source
+   archive contains `tools/fetch_native_dependencies.py` and contains no
+   WiliBSP or OneWili source files.
+7. Extract the device archive into a clean directory. Launch its one-click
+   installer, inspect the strict CM0 serial manifest, and confirm no local
+   toolchain, secret, backup, or hardware dump entered the bundle. Exercise
+   both direct-SD installation and the volatile debug-probe fallback before a
+   supported release.
 8. Upload and preview the splash plus continuous RSSI scale through the Main
    serial port with `deploy/fw2_asset_upload.py --port PORT --show`.
 9. Install the rebuilt native app on the release device. Confirm the staged
@@ -65,11 +71,13 @@
     and only then create the exact matching version tag. Confirm the workflow
     attaches both `.uf2` files directly, not only the archive.
 
-Publish the device-install `.tar.gz`, complete-source `.tar.gz`, both checksum
+Publish the device-install `.tar.gz`, project-source `.tar.gz`, both checksum
 sidecars, both validated `.uf2` files, `native/dist/SHA256SUMS`, and release
 notes on GitHub. GitHub's generated tag archive preserves submodule gitlinks
-but not their contents; the separately generated complete-source archive is
-the durable offline rebuild input. The device-install bundle is deliberately
+but not their contents. The separately generated project-source archive records
+the same reviewed dependency URLs and commits but does not copy vendor trees;
+`tools/fetch_native_dependencies.py` retrieves those exact revisions directly
+from FreeWili for a local rebuild. The device-install bundle is deliberately
 not a standalone native-source tree.
 Do not
 publish a supported binary release while OneWili redistribution permission or

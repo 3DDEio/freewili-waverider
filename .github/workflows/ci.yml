@@ -24,7 +24,7 @@ jobs:
       - run: python -m pytest -q tests
       - run: python wilibsp/tools/check_app_repo.py .
       - run: python tools/prepare_wilibsp.py
-      - run: sh -n install.sh uninstall.sh bin/foxhuntctl bin/foxhunt-guard deploy/build-native-apps.sh deploy/build-release.sh deploy/build-source-release.sh deploy/setup-native-ci-linux.sh
+      - run: sh -n install.sh uninstall.sh bin/foxhuntctl bin/foxhunt-guard deploy/build-native-apps.sh deploy/build-release.sh deploy/build-source-release.sh deploy/setup-native-ci-linux.sh installer/run-waverider-installer.sh "installer/Run WaveRider Installer.command"
       - run: cd vendor/debian-source/rtl-sdr-2.0.2-2 && sha256sum -c SHA256SUMS
       - run: |
           printf '%s  %s\n' \

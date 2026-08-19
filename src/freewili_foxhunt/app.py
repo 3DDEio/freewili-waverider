@@ -854,13 +854,46 @@ class FoxhuntApp:
             self.dirty = True
 
     def run(self) -> int:
-        self.status.write(state="starting", frequency_hz=self.entry.frequency_hz)
+        LOG.info(
+            "startup stage=receiver state=starting frequency_hz=%d",
+            self.entry.frequency_hz,
+        )
+        self.status.write(
+            state="starting",
+            startup_stage="receiver",
+            frequency_hz=self.entry.frequency_hz,
+            sdr_connected=False,
+            display_connected=False,
+        )
         try:
             # RTL-SDR capture is independent of the Main/display handshake.
             # Start it first so USB initialization and the first FFT row can
             # proceed while WaveRider connects to the app-signal mailbox.
             self.sdr.start(self.entry)
+            LOG.info("startup stage=receiver state=started")
+            self.status.write(
+                state="starting",
+                startup_stage="display",
+                frequency_hz=self.entry.frequency_hz,
+                sdr_connected=True,
+                display_connected=False,
+            )
             self._connect_display()
+            display_snapshot = self.display.snapshot
+            LOG.info(
+                "startup stage=display state=%s message=%s",
+                "connected" if display_snapshot.connected else "waiting",
+                display_snapshot.message,
+            )
+            self.status.write(
+                state="starting",
+                startup_stage="first_row",
+                frequency_hz=self.entry.frequency_hz,
+                sdr_connected=True,
+                display_connected=display_snapshot.connected,
+                display_message=display_snapshot.message,
+            )
+            first_row = True
             while not self.stop_event.is_set():
                 self._retry_display_if_needed()
                 if self._apply_pending_selection():
@@ -901,11 +934,18 @@ class FoxhuntApp:
                     if elapsed > 0:
                         row_rate_hz = (len(self._waterfall_timestamps) - 1) / elapsed
                 snapshot = self.display.snapshot
+                if first_row:
+                    LOG.info(
+                        "startup stage=live state=first-row frequency_hz=%d",
+                        self.entry.frequency_hz,
+                    )
+                    first_row = False
                 morse_timing = getattr(
                     getattr(self.sdr, "morse_decoder", None), "timing", None
                 )
                 self.status.write(
                     state="live",
+                    startup_stage="live",
                     sdr_connected=True,
                     display_connected=snapshot.connected,
                     display_message=snapshot.message,
@@ -1032,6 +1072,7 @@ class FoxhuntApp:
             LOG.exception("foxhunt runtime failed")
             self.status.write(
                 state="error",
+                startup_stage="error",
                 sdr_connected=False,
                 display_connected=self.display.snapshot.connected,
                 error=str(error),
@@ -1060,6 +1101,7 @@ def main() -> int:
         level=getattr(logging, args.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    LOG.info("startup stage=configuration state=loading")
     store = ListStore(Path(args.state_dir) / "lists")
     lists = store.load_all()
     if args.list_path:
@@ -1077,6 +1119,13 @@ def main() -> int:
     message_records = message_store.load_or_empty()
     decoder_store = DecoderSettingsStore(Path(args.state_dir) / "decoder-settings.json")
     decoder_settings = decoder_store.load_or_default()
+    LOG.info(
+        "startup stage=configuration state=ready lists=%d saved_frequencies=%d "
+        "message_records=%d",
+        len(lists),
+        len(saved_frequencies),
+        len(message_records),
+    )
 
     app = FoxhuntApp(
         selected_list,

@@ -1,0 +1,1 @@
+"""WaveRider host installer package."""

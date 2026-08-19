@@ -15,6 +15,8 @@ public beta.
 
 ## Install and maintain
 
+- [Installation](INSTALLATION.md) — one-click release install, prerequisites,
+  safety checks, and fallback behavior.
 - [Deployment and releases](DEPLOYMENT.md) — complete installation, native
   safety gates, release checklist, and maintainer recovery.
 - [Architecture](ARCHITECTURE.md) — CM0, Main, Display, mailbox, and data-flow
