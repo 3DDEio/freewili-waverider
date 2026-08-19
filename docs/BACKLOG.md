@@ -33,6 +33,16 @@ hardware observations in that audit.
 - [ ] Collect a support ZIP from the buddy's device while it is stuck on CM0
   startup, identify the first failing milestone, and confirm the route returns
   to normal app ownership after collection.
+  The first Windows 11 bundle verified the release manifest and selected
+  `COM11`, then failed before CM0 access with **Main did not open a correlated
+  CM0 shell**. It could not distinguish a manually selected wrong COM port from
+  a silent/occupied Main parser because the CLI reused a stale 36-minute-old
+  session log and the pre-shell failure discarded partial evidence. The
+  collector now creates a fresh current-attempt log, copies it only after the
+  collection completes, inventories host serial ports, records fwFinder's Main
+  classification, performs a harmless read-only Main probe, and preserves that
+  preflight even when the CM0 shell never opens. Obtain one second bundle with
+  this hardened schema to close the classification step.
 - [ ] Run the combined installer from a clean supported release bundle against
   FX0177/v07 on macOS, then repeat on at least one Windows or Linux host. Prove
   direct-SD and debug-probe fallback behavior, automatic CM0 shell preparation,

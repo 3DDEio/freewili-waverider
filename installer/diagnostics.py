@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -17,9 +18,11 @@ from pathlib import Path
 from typing import Callable
 
 import serial
+from serial.tools import list_ports
 
 from tools.fw2_deploy_live_fix import (
     detach_shell,
+    has_shell_prompt,
     open_shell,
     read_remote_line_file,
     shell_ok,
@@ -27,7 +30,7 @@ from tools.fw2_deploy_live_fix import (
 
 
 ProgressCallback = Callable[[int, str], None]
-SUPPORT_SCHEMA = 1
+SUPPORT_SCHEMA = 2
 REMOTE_REPORT_LIMIT = 12_000
 STATUS_LIMIT = 12_000
 STATUS_FIELDS = (
@@ -135,17 +138,143 @@ def sanitize_status(status: object) -> dict[str, object]:
     return sanitized
 
 
+def host_serial_inventory(selected_port: str | None) -> dict[str, object]:
+    """Record USB identities and whether fwFinder recognizes the selected Main port."""
+
+    selected_key = selected_port.casefold() if selected_port else None
+    ports = []
+    try:
+        discovered = list(list_ports.comports())
+    except Exception as error:
+        discovered = []
+        port_error = redact_text(str(error))
+    else:
+        port_error = None
+    for item in discovered:
+        path = str(getattr(item, "device", "") or "")
+        ports.append(
+            {
+                "device": path,
+                "selected": bool(selected_key and path.casefold() == selected_key),
+                "description": str(getattr(item, "description", "") or ""),
+                "manufacturer": str(getattr(item, "manufacturer", "") or ""),
+                "product": str(getattr(item, "product", "") or ""),
+                "interface": str(getattr(item, "interface", "") or ""),
+                "vid": getattr(item, "vid", None),
+                "pid": getattr(item, "pid", None),
+            }
+        )
+
+    try:
+        from installer.device_install import find_main_ports
+
+        main_candidates = [path for _label, path in find_main_ports()]
+        candidate_error = None
+    except Exception as error:
+        main_candidates = []
+        candidate_error = redact_text(str(error))
+    candidate_keys = {path.casefold() for path in main_candidates}
+    return {
+        "selected_port": selected_port,
+        "selected_is_freewili_main": bool(
+            selected_key and selected_key in candidate_keys
+        ),
+        "freewili_main_candidates": main_candidates,
+        "freewili_discovery_error": candidate_error,
+        "serial_inventory_error": port_error,
+        "serial_ports": ports,
+    }
+
+
+def _read_probe_bytes(
+    port: serial.Serial,
+    timeout: float,
+    *,
+    expected: bytes | None = None,
+    stop_on_prompt: bool = False,
+) -> bytes:
+    deadline = time.monotonic() + timeout
+    pending = bytearray()
+    while time.monotonic() < deadline and len(pending) < 4096:
+        data = port.read(min(4096 - len(pending), 4096))
+        if not data:
+            continue
+        pending.extend(data)
+        if stop_on_prompt and has_shell_prompt(bytes(pending)):
+            break
+        if expected is not None:
+            start = pending.find(expected)
+            if start >= 0 and pending.find(b"]", start) >= 0:
+                break
+    return bytes(pending)
+
+
+def probe_main_route(
+    port: serial.Serial,
+    *,
+    prompt_timeout: float = 2.0,
+    command_timeout: float = 5.0,
+) -> str:
+    """Classify the selected port before requesting a CM0 shell.
+
+    The RTC query is a bounded, read-only Main command. It is skipped when the
+    port already presents a routed Linux prompt.
+    """
+
+    port.reset_input_buffer()
+    port.write(b"\r")
+    port.flush()
+    prompt_bytes = _read_probe_bytes(port, prompt_timeout, stop_on_prompt=True)
+    lines = [f"PROMPT_BYTES={prompt_bytes!r}"]
+    if has_shell_prompt(prompt_bytes):
+        lines.extend(("ROUTE_STATE=existing-cm0-shell", "MAIN_RTC_ACK=not-attempted"))
+        return "\n".join(lines) + "\n"
+
+    port.reset_input_buffer()
+    port.write(b"\x02h\\t\n")
+    port.flush()
+    response = _read_probe_bytes(port, command_timeout, expected=b"[h\\t ")
+    start = response.find(b"[h\\t ")
+    end = response.find(b"]", start) if start >= 0 else -1
+    acknowledged = start >= 0 and end >= 0
+    lines.extend(
+        (
+            (
+                "ROUTE_STATE=main-parser-responsive"
+                if acknowledged
+                else "ROUTE_STATE=main-parser-silent"
+            ),
+            f"MAIN_RTC_ACK={'yes' if acknowledged else 'no'}",
+            f"RTC_RESPONSE={response!r}",
+        )
+    )
+    return "\n".join(lines) + "\n"
+
+
 class SessionLog:
     """Small rotating installer timeline that survives GUI failures."""
 
     def __init__(self, directory: Path | None = None, *, keep: int = 10) -> None:
-        self.directory = directory or default_log_directory()
-        self.directory.mkdir(parents=True, exist_ok=True)
+        requested = directory or default_log_directory()
+        fallback_reason: str | None = None
+        try:
+            requested.mkdir(parents=True, exist_ok=True)
+            self.directory = requested
+        except OSError as error:
+            self.directory = Path(tempfile.gettempdir()) / "WaveRider-Logs"
+            self.directory.mkdir(parents=True, exist_ok=True)
+            fallback_reason = str(error)
         stamp = utc_now().strftime("%Y%m%dT%H%M%SZ")
         self.path = self.directory / f"installer-{stamp}-{os.getpid()}.log"
         self._lock = threading.Lock()
         self._rotate(keep)
         self.write("SESSION", "WaveRider installer session started")
+        if fallback_reason is not None:
+            self.write(
+                "WARNING",
+                "Persistent log directory unavailable; using temporary storage: "
+                + fallback_reason,
+            )
 
     def _rotate(self, keep: int) -> None:
         logs = sorted(self.directory.glob("installer-*.log"), reverse=True)
@@ -212,47 +341,57 @@ def collect_remote_diagnostics(
     port_name: str,
     *,
     progress: ProgressCallback | None = None,
-) -> tuple[dict[str, str], tuple[str, ...]]:
+) -> tuple[dict[str, str], tuple[str, ...], bool]:
     """Collect bounded CM0 evidence and always attempt to release an opened route."""
 
     reports: dict[str, str] = {}
     warnings: list[str] = []
     detach_confirmed = True
+    opened = False
     _progress(progress, 5, "Opening a temporary CM0 support route")
     with serial.Serial(port_name, 1_000_000, timeout=0.05) as port:
-        opened = False
         try:
-            open_shell(port)
-            opened = True
-            shell_ok(port, "stty -echo")
-            for index, (name, command) in enumerate(REMOTE_QUERIES):
-                _progress(
-                    progress,
-                    15 + int(55 * index / max(len(REMOTE_QUERIES), 1)),
-                    f"Collecting {name.replace('-', ' ').removesuffix('.txt')}",
-                )
-                try:
-                    reports[name] = redact_text(_remote_report(port, name, command))
-                except Exception as error:
-                    warning = f"{name}: {redact_text(str(error))}"
-                    warnings.append(warning)
-                    reports[name] = "COLLECTION ERROR\n" + warning + "\n"
-            _progress(progress, 72, "Reading sanitized WaveRider runtime status")
+            _progress(progress, 8, "Checking the selected Main serial route")
+            reports["main-route-probe.txt"] = probe_main_route(port)
             try:
-                raw_status = read_remote_line_file(
-                    port,
-                    "/run/freewili-foxhunt/status.json",
-                    max_bytes=STATUS_LIMIT,
-                )
-                reports["runtime-status.json"] = json.dumps(
-                    sanitize_status(json.loads(raw_status)), indent=2, sort_keys=True
-                ) + "\n"
+                open_shell(port)
             except Exception as error:
-                warning = f"runtime-status.json: {redact_text(str(error))}"
+                warning = "CM0 shell: " + redact_text(str(error))
                 warnings.append(warning)
-                reports["runtime-status.json"] = json.dumps(
-                    {"collection_error": warning}, indent=2, sort_keys=True
-                ) + "\n"
+                reports["cm0-shell-error.txt"] = warning + "\n"
+            else:
+                opened = True
+                shell_ok(port, "stty -echo")
+                for index, (name, command) in enumerate(REMOTE_QUERIES):
+                    _progress(
+                        progress,
+                        15 + int(55 * index / max(len(REMOTE_QUERIES), 1)),
+                        f"Collecting {name.replace('-', ' ').removesuffix('.txt')}",
+                    )
+                    try:
+                        reports[name] = redact_text(
+                            _remote_report(port, name, command)
+                        )
+                    except Exception as error:
+                        warning = f"{name}: {redact_text(str(error))}"
+                        warnings.append(warning)
+                        reports[name] = "COLLECTION ERROR\n" + warning + "\n"
+                _progress(progress, 72, "Reading sanitized WaveRider runtime status")
+                try:
+                    raw_status = read_remote_line_file(
+                        port,
+                        "/run/freewili-foxhunt/status.json",
+                        max_bytes=STATUS_LIMIT,
+                    )
+                    reports["runtime-status.json"] = json.dumps(
+                        sanitize_status(json.loads(raw_status)), indent=2, sort_keys=True
+                    ) + "\n"
+                except Exception as error:
+                    warning = f"runtime-status.json: {redact_text(str(error))}"
+                    warnings.append(warning)
+                    reports["runtime-status.json"] = json.dumps(
+                        {"collection_error": warning}, indent=2, sort_keys=True
+                    ) + "\n"
         finally:
             if opened:
                 try:
@@ -267,16 +406,19 @@ def collect_remote_diagnostics(
                         "CM0 support route detach could not be confirmed: "
                         + redact_text(str(error))
                     )
-    _progress(
-        progress,
-        80,
-        (
-            "CM0 support route released"
-            if detach_confirmed
-            else "CM0 support route release could not be confirmed"
-        ),
-    )
-    return reports, tuple(warnings)
+    if opened:
+        _progress(
+            progress,
+            80,
+            (
+                "CM0 support route released"
+                if detach_confirmed
+                else "CM0 support route release could not be confirmed"
+            ),
+        )
+    else:
+        _progress(progress, 80, "Main preflight saved; CM0 shell did not open")
+    return reports, tuple(warnings), opened
 
 
 def collect_support_bundle(
@@ -322,12 +464,13 @@ def collect_support_bundle(
             "recorded in warnings.txt.\n",
             encoding="utf-8",
         )
-        if session_log is not None and session_log.is_file():
-            try:
-                content = redact_text(session_log.read_text(encoding="utf-8"))
-                (stage / "installer-session.log").write_text(content, encoding="utf-8")
-            except OSError as error:
-                warnings.append(f"installer log: {redact_text(str(error))}")
+        (stage / "host-serial-ports.json").write_text(
+            json.dumps(
+                host_serial_inventory(port_name), indent=2, sort_keys=True
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
         try:
             from installer.device_install import verify_release_checksums
@@ -341,19 +484,20 @@ def collect_support_bundle(
 
         if port_name:
             try:
-                reports, remote_warnings = collect_remote_diagnostics(
+                reports, remote_warnings, route_opened = collect_remote_diagnostics(
                     port_name,
                     progress=lambda value, message: _progress(
                         progress, 10 + int(value * 0.75), message
                     ),
                 )
-                remote_collected = True
+                remote_collected = route_opened
                 warnings.extend(remote_warnings)
                 for name, content in reports.items():
                     (stage / name).write_text(content, encoding="utf-8")
             except Exception as error:
                 warning = "CM0 collection: " + redact_text(str(error))
                 warnings.append(warning)
+                _progress(progress, 82, "CM0 evidence unavailable: " + str(error))
                 (stage / "cm0-collection-error.txt").write_text(
                     warning + "\n", encoding="utf-8"
                 )
@@ -364,11 +508,18 @@ def collect_support_bundle(
                 warning + "\n", encoding="utf-8"
             )
 
+        _progress(progress, 90, "Writing the support ZIP")
+        if session_log is not None and session_log.is_file():
+            try:
+                content = redact_text(session_log.read_text(encoding="utf-8"))
+                (stage / "installer-session.log").write_text(content, encoding="utf-8")
+            except OSError as error:
+                warnings.append(f"installer log: {redact_text(str(error))}")
+
         (stage / "warnings.txt").write_text(
             ("\n".join(warnings) + "\n") if warnings else "None\n",
             encoding="utf-8",
         )
-        _progress(progress, 90, "Writing the support ZIP")
         candidate = destination.with_name(destination.name + ".tmp")
         try:
             with zipfile.ZipFile(

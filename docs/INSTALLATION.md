@@ -49,6 +49,8 @@ on-device message.
 The bundle records:
 
 - the persistent installer timeline and release-integrity result;
+- the host serial-port inventory, FreeWili Main-port classification, and a
+  bounded read-only Main parser probe;
 - the last reported WaveRider startup stage and sanitized receiver health;
 - bounded status for the CM0 bridge, WaveRider, and guard services;
 - bounded current-boot journal excerpts, CM0 boot-role facts, and USB discovery.
@@ -69,6 +71,15 @@ Advanced users can collect the same bundle without the GUI:
 python3 installer/collect_diagnostics.py --port /dev/cu.YOUR_MAIN_PORT \
   --output WaveRider-Support.zip
 ```
+
+The `main-route-probe.txt` result makes an early failure actionable:
+
+- `existing-cm0-shell` means a routed Linux shell already owned the path;
+- `main-parser-responsive` means Main answered the read-only probe, so a later
+  shell-open failure is specifically between Main and the CM0 route;
+- `main-parser-silent` means the selected port produced no Main response;
+- `host-serial-ports.json` reports whether the selected port was independently
+  identified as FreeWili Main, which catches a manually chosen wrong COM port.
 
 ## Safety and fallback behavior
 

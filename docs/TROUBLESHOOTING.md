@@ -30,6 +30,12 @@ frequencies or decoded messages. A missing Main port still yields a useful
 local installer/discovery timeline. See
 [Save diagnostics for remote support](INSTALLATION.md#save-diagnostics-for-remote-support).
 
+Inspect `host-serial-ports.json` and `main-route-probe.txt` before treating the
+CM0 as failed. A selected port not listed under `freewili_main_candidates` is a
+host port-selection problem. `main-parser-silent` on a correctly identified Main
+port means Main's command parser is unavailable; `main-parser-responsive`
+followed by a shell-open failure narrows the fault to Main's routed CM0 path.
+
 First allow the normal CM0/tuner startup window. WaveRider now waits 20 seconds
 before attempting any recovery. On FW2 v07, Main can occasionally retain its
 routed Linux `TYPE_SHELL` session during a fresh launch. In that state the SDR

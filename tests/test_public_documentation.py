@@ -148,6 +148,9 @@ def test_release_installation_leads_with_the_one_click_flow():
     assert "Save Diagnostics" in installation
     assert "decoded-message history" in installation
     assert "Any detach failure" in installation
+    assert "main-route-probe.txt" in installation
+    assert "main-parser-responsive" in installation
+    assert "host-serial-ports.json" in installation
     assert (ROOT / "installer" / "diagnostics.py").is_file()
     assert (ROOT / "installer" / "collect_diagnostics.py").is_file()
 

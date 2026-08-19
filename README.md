@@ -217,7 +217,9 @@ If a different device remains on a CM0 startup screen, reconnect its FreeWili
 USB cable, reopen the same installer, select the device if it appears, and click
 **Save Diagnostics**. The resulting ZIP contains the persistent installer
 timeline, CM0 startup stage, bounded service logs, USB discovery, and sanitized
-runtime health. It does not include decoded CW text, message history, saved
+runtime health. It also records whether the selected serial port was identified
+as FreeWili Main and whether Main answered a harmless read-only probe before
+the CM0 shell request. It does not include decoded CW text, message history, saved
 frequency lists, or unrelated files from the user's home directory. The
 diagnostic pass does not reboot, restart, or install anything; it attempts to
 release its temporary CM0 support route before returning and records any

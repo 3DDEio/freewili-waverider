@@ -17,6 +17,10 @@ All notable public changes to WaveRider are recorded here. The format follows
   USB, and sanitized runtime evidence without exporting decoded messages or
   saved frequency lists, and always attempts to release an opened support
   route while recording any detach failure.
+- Hardened real-world support capture now creates a fresh CLI timeline, copies
+  it after collection, records host serial/FreeWili Main classification, and
+  preserves a read-only Main parser preflight even when the CM0 shell cannot
+  open.
 - Frequency-grouped, persistent CW message history with confirmation-gated
   Clear and larger word-wrapped decoded text.
 - Git-clone installation quick start, repository map, and browsable
